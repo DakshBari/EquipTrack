@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
-import { Camera, CameraOff, ChevronRight, QrCode, Search } from 'lucide-react';
+import { Camera, CameraOff, ChevronRight, ImageUp, QrCode, Search } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useNavigate } from 'react-router-dom';
 import { EquipmentStatusLabel } from '../../components/StatusBadge';
@@ -13,9 +13,37 @@ export function OperatorQrScannerPage() {
   const navigate = useNavigate();
 
   const [cameraActive, setCameraActive] = useState(false);
+  const [cameraStarting, setCameraStarting] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [photoScanning, setPhotoScanning] = useState(false);
   const [manualId, setManualId] = useState('FL-001');
   const scannerRef = useRef<Html5Qrcode | null>(null);
+  const mountedRef = useRef(true);
+  const handledRef = useRef(false);
+
+  // The live scanner needs the browser camera API, which only exists on https
+  // (or localhost). The photo fallback below works everywhere.
+  const liveCameraSupported =
+    typeof window !== 'undefined' &&
+    window.isSecureContext &&
+    typeof navigator !== 'undefined' &&
+    !!navigator.mediaDevices?.getUserMedia;
+
+  const stopScanner = async () => {
+    const scanner = scannerRef.current;
+    scannerRef.current = null;
+    if (scanner) {
+      try {
+        if (scanner.isScanning) {
+          await scanner.stop();
+        }
+        scanner.clear();
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+    if (mountedRef.current) setCameraActive(false);
+  };
 
   const handleDecodedValue = (decodedText: string) => {
     const cleaned = decodedText.trim();
@@ -23,37 +51,53 @@ export function OperatorQrScannerPage() {
     const eqId = match ? match[1].toUpperCase() : cleaned.toUpperCase();
     const found = state.equipment.find((e) => e.id.toUpperCase() === eqId);
     if (found) {
-      stopScanner();
-      navigate(`/equipment/${found.id}`);
+      // The scanner fires repeatedly while the code stays in view; act once.
+      if (handledRef.current) return;
+      handledRef.current = true;
+      stopScanner().finally(() => navigate(`/equipment/${found.id}`));
     } else {
       setCameraError(`QR code "${cleaned}" did not match a known EquipTrack equipment ID.`);
     }
   };
 
-  const stopScanner = async () => {
-    if (scannerRef.current) {
-      try {
-        if (scannerRef.current.isScanning) {
-          await scannerRef.current.stop();
-        }
-        scannerRef.current.clear();
-      } catch {
-        // Ignore cleanup errors
-      }
-      scannerRef.current = null;
+  const describeCameraError = (err: unknown): string => {
+    const name = (err as { name?: string })?.name || '';
+    const text = String((err as { message?: string })?.message || err || '');
+    if (!liveCameraSupported || /mediaDevices|not supported/i.test(text)) {
+      return 'Live camera scanning needs a secure (https) connection, so this browser blocked it. Use “Scan from Photo” below instead.';
     }
-    setCameraActive(false);
+    if (name === 'NotAllowedError' || /permission|denied|not allowed/i.test(text)) {
+      return 'Camera permission was blocked. Allow camera access for this site in your browser settings, or use “Scan from Photo”.';
+    }
+    if (name === 'NotFoundError' || name === 'OverconstrainedError' || /not found|no camera|requested device/i.test(text)) {
+      return 'No camera was found on this device. Use “Scan from Photo” or pick the equipment below.';
+    }
+    if (name === 'NotReadableError' || /could not start|in use|track/i.test(text)) {
+      return 'The camera is being used by another app. Close it and try again, or use “Scan from Photo”.';
+    }
+    return 'The camera could not be started in this browser. Use “Scan from Photo” or pick the equipment below.';
   };
 
   const startScanner = async () => {
+    if (cameraStarting || scannerRef.current) return;
     setCameraError(null);
+    handledRef.current = false;
+    if (!liveCameraSupported) {
+      setCameraError(describeCameraError(null));
+      return;
+    }
+    setCameraStarting(true);
     try {
-      const html5QrCode = new Html5Qrcode('qr-reader-region');
+      // This element is never rendered into by React (the placeholder is a
+      // separate overlay), because html5-qrcode clears and fills it itself.
+      const html5QrCode = new Html5Qrcode('qr-reader-region', { verbose: false });
       scannerRef.current = html5QrCode;
-      setCameraActive(true);
       await html5QrCode.start(
         { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 220, height: 220 } },
+        { fps: 10, qrbox: (w: number, h: number) => {
+            const size = Math.max(160, Math.floor(Math.min(w, h) * 0.7));
+            return { width: size, height: size };
+          } },
         (decodedText) => {
           handleDecodedValue(decodedText);
         },
@@ -61,16 +105,58 @@ export function OperatorQrScannerPage() {
           // Ignore frame decode misses
         }
       );
+      if (!mountedRef.current) {
+        await stopScanner();
+        return;
+      }
+      setCameraActive(true);
+    } catch (err) {
+      try {
+        scannerRef.current?.clear();
+      } catch {
+        // ignore
+      }
+      scannerRef.current = null;
+      if (mountedRef.current) {
+        setCameraActive(false);
+        setCameraError(describeCameraError(err));
+      }
+    } finally {
+      if (mountedRef.current) setCameraStarting(false);
+    }
+  };
+
+  // Fallback: same native camera capture used for fault photos, then decode the picture.
+  const handlePhotoScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setCameraError(null);
+    handledRef.current = false;
+    if (scannerRef.current) await stopScanner();
+    setPhotoScanning(true);
+    try {
+      const decoder = new Html5Qrcode('qr-file-region', { verbose: false });
+      const decoded = await decoder.scanFile(file, false);
+      try {
+        decoder.clear();
+      } catch {
+        // ignore
+      }
+      handleDecodedValue(decoded);
     } catch {
-      setCameraActive(false);
       setCameraError(
-        'Camera access is unavailable in this browser or preview frame. Use Simulated Scan or select an equipment tag below.'
+        'No QR code found in that photo. Hold the phone closer so the tag fills most of the picture, and try again.'
       );
+    } finally {
+      if (mountedRef.current) setPhotoScanning(false);
     }
   };
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
       stopScanner();
     };
   }, []);
@@ -105,32 +191,62 @@ export function OperatorQrScannerPage() {
               <button
                 type="button"
                 onClick={startScanner}
-                className="min-h-[40px] px-3.5 py-1.5 rounded-xl bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5"
+                disabled={cameraStarting}
+                className="min-h-[40px] px-3.5 py-1.5 rounded-xl bg-blue-700 disabled:opacity-60 text-white text-xs font-semibold flex items-center gap-1.5"
               >
                 <Camera className="w-4 h-4" />
-                Start Camera
+                {cameraStarting ? 'Starting…' : 'Start Camera'}
               </button>
             )}
           </div>
 
           <div
-            id="qr-reader-region"
-            className={`w-full rounded-xl overflow-hidden bg-slate-900 text-white flex flex-col items-center justify-center ${
-              cameraActive ? 'min-h-[260px]' : 'h-40'
+            className={`relative w-full rounded-xl overflow-hidden bg-slate-900 text-white ${
+              cameraActive || cameraStarting ? 'min-h-[260px]' : 'h-40'
             }`}
           >
+            {/* Scanner mount point: must stay empty in React (html5-qrcode owns its contents) */}
+            <div id="qr-reader-region" className="w-full [&_video]:w-full [&_video]:h-auto [&_video]:block" />
+
             {!cameraActive && (
-              <div className="text-center px-4">
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-4 pointer-events-none">
                 <QrCode className="w-9 h-9 text-slate-400 mx-auto mb-2" />
                 <p className="text-xs text-slate-300">
-                  Tap Start Camera to scan a physical asset QR sticker
+                  {cameraStarting
+                    ? 'Starting camera… allow access if your browser asks.'
+                    : 'Tap Start Camera to scan a physical asset QR sticker'}
                 </p>
               </div>
             )}
           </div>
 
+          {/* Hidden element the photo decoder needs */}
+          <div id="qr-file-region" className="hidden" aria-hidden />
+
+          {/* Photo fallback: uses the phone's own camera app, like fault photos */}
+          <label
+            className={`w-full min-h-[48px] rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-sm font-semibold text-slate-800 flex items-center justify-center gap-2 cursor-pointer focus-within:ring-2 focus-within:ring-blue-700 ${
+              photoScanning ? 'opacity-60 pointer-events-none' : ''
+            }`}
+          >
+            <ImageUp className="w-4 h-4 text-blue-700" />
+            <span>{photoScanning ? 'Reading QR code…' : 'Scan from Photo'}</span>
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handlePhotoScan}
+              className="sr-only"
+            />
+          </label>
+          {!liveCameraSupported && !cameraError && (
+            <p className="text-[11px] text-slate-500 -mt-1">
+              Live scanning needs https. On this connection, use Scan from Photo: take a picture of the tag.
+            </p>
+          )}
+
           {cameraError && (
-            <div className="rounded-xl bg-amber-50 border border-amber-200 px-3.5 py-2.5 text-xs text-amber-800">
+            <div role="alert" className="rounded-xl bg-amber-50 border border-amber-200 px-3.5 py-2.5 text-xs text-amber-800">
               {cameraError}
             </div>
           )}
