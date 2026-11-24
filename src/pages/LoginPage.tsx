@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   ClipboardCheck,
   Lock,
-  Mail,
   MapPin,
   Mic,
   QrCode,
@@ -278,12 +277,9 @@ function PhoneMockup() {
 /* -------------------------------------------------------------------------- */
 
 export function LoginPage() {
-  const { loginWithCredentials, loginAsRole, resetDemoData } = useEquipTrack();
+  const { loginAsRole, resetDemoData } = useEquipTrack();
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState('operator@demo.com');
-  const [password, setPassword] = useState('Demo@123');
-  const [error, setError] = useState<string | null>(null);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
 
   const navigateForRole = (role: UserRole) => {
@@ -292,19 +288,7 @@ export function LoginPage() {
     else navigate('/admin');
   };
 
-  const handleManualSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    const res = loginWithCredentials(email, password);
-    if (!res.ok || !res.user) {
-      setError(res.error || 'Unable to sign in');
-      return;
-    }
-    navigateForRole(res.user.role);
-  };
-
   const handleQuickDemoLogin = (role: UserRole) => {
-    setError(null);
     const user = loginAsRole(role);
     if (user) {
       navigateForRole(user.role);
@@ -319,7 +303,10 @@ export function LoginPage() {
 
   const scrollToSignIn = () => {
     document.getElementById('sign-in')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    window.setTimeout(() => document.getElementById('login-email')?.focus({ preventScroll: true }), 400);
+    window.setTimeout(
+      () => document.querySelector<HTMLButtonElement>('#sign-in button')?.focus({ preventScroll: true }),
+      400
+    );
   };
 
   const demoCards: {
@@ -327,7 +314,6 @@ export function LoginPage() {
     title: string;
     person: string;
     site: string;
-    email: string;
     icon: React.ElementType;
     tone: string;
   }[] = [
@@ -336,7 +322,6 @@ export function LoginPage() {
       title: 'Operator',
       person: 'James Wilson',
       site: 'Canning Vale',
-      email: 'operator@demo.com',
       icon: Smartphone,
       tone: 'text-blue-700 bg-blue-50 group-hover:bg-blue-700 group-hover:text-white',
     },
@@ -345,7 +330,6 @@ export function LoginPage() {
       title: 'Supervisor',
       person: 'Sarah Mitchell',
       site: 'Both sites',
-      email: 'supervisor@demo.com',
       icon: Wrench,
       tone: 'text-amber-700 bg-amber-50 group-hover:bg-amber-500 group-hover:text-white',
     },
@@ -354,7 +338,6 @@ export function LoginPage() {
       title: 'Admin',
       person: 'Craig Henderson',
       site: 'Organisation',
-      email: 'admin@demo.com',
       icon: ShieldCheck,
       tone: 'text-emerald-700 bg-emerald-50 group-hover:bg-emerald-600 group-hover:text-white',
     },
@@ -440,69 +423,13 @@ export function LoginPage() {
                   }}
                 />
                 <div className="relative rounded-[1.32rem] bg-white text-slate-900 p-5 sm:p-6">
-                  <div className="flex items-center justify-between gap-2">
-                    <h2 className="text-lg font-bold">Sign in</h2>
-                    <span className="text-[11px] font-mono text-slate-500">Password: Demo@123</span>
-                  </div>
+                  <h2 className="text-lg font-bold">Sign in</h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Choose a demo account. One tap signs you in, no password needed.
+                  </p>
 
-                  <form onSubmit={handleManualSubmit} className="mt-4 space-y-3">
-                    <div>
-                      <label htmlFor="login-email" className="sr-only">
-                        Email address
-                      </label>
-                      <div className="relative">
-                        <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                        <input
-                          id="login-email"
-                          type="email"
-                          required
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          className="w-full min-h-[48px] pl-10 pr-3.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-700"
-                          placeholder="Email address"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label htmlFor="login-password" className="sr-only">
-                        Password
-                      </label>
-                      <div className="relative">
-                        <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                        <input
-                          id="login-password"
-                          type="password"
-                          required
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          className="w-full min-h-[48px] pl-10 pr-3.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-700"
-                          placeholder="Password"
-                        />
-                      </div>
-                    </div>
-
-                    {error && (
-                      <div
-                        role="alert"
-                        className="rounded-xl bg-red-50 border border-red-200 px-3.5 py-2.5 text-xs font-medium text-red-700"
-                      >
-                        {error}
-                      </div>
-                    )}
-
-                    <button
-                      type="submit"
-                      className="group w-full min-h-[48px] rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold transition-colors flex items-center justify-center gap-2"
-                    >
-                      Sign In
-                      <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
-                    </button>
-                  </form>
-
-                  <div className="my-5 flex items-center gap-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                    <span className="h-px flex-1 bg-slate-200" />
-                    or one-click demo
-                    <span className="h-px flex-1 bg-slate-200" />
+                  <div className="mt-4 mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    One-click demo sign-in
                   </div>
 
                   <div className="grid grid-cols-3 gap-2">
@@ -513,8 +440,8 @@ export function LoginPage() {
                           key={card.role}
                           type="button"
                           onClick={() => handleQuickDemoLogin(card.role)}
-                          title={`${card.email} · Demo@123`}
-                          className="group rounded-xl border border-slate-200 hover:border-slate-300 hover:shadow-md bg-white p-2.5 sm:p-3 text-left transition-all hover:-translate-y-0.5"
+                          aria-label={`Sign in as ${card.title} (${card.person})`}
+                          className="group rounded-xl border border-slate-200 hover:border-blue-300 hover:shadow-md bg-white p-2.5 sm:p-3 text-left transition-all hover:-translate-y-0.5 flex flex-col focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-700"
                         >
                           <span
                             className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${card.tone}`}
@@ -522,17 +449,15 @@ export function LoginPage() {
                             <Icon className="w-[18px] h-[18px]" />
                           </span>
                           <span className="mt-2 block text-sm font-bold text-slate-900">{card.title}</span>
-                          <span className="block text-[11px] text-slate-500 truncate">{card.person}</span>
-                          <span className="hidden sm:block text-[10px] text-slate-400 truncate">{card.site}</span>
+                          <span className="block text-[11px] leading-snug text-slate-500">{card.person}</span>
+                          <span className="block text-[10px] leading-snug text-slate-400 pb-2.5">{card.site}</span>
+                          <span className="mt-auto pt-2 border-t border-slate-100 flex items-center justify-between gap-1 text-[11px] font-bold text-blue-700">
+                            Sign in
+                            <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+                          </span>
                         </button>
                       );
                     })}
-                  </div>
-
-                  <div className="mt-4 pt-3.5 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-3 gap-x-2 gap-y-0.5 text-[10.5px] font-mono text-slate-500">
-                    <span className="truncate">operator@demo.com</span>
-                    <span className="truncate">supervisor@demo.com</span>
-                    <span className="truncate">admin@demo.com</span>
                   </div>
                 </div>
               </div>
