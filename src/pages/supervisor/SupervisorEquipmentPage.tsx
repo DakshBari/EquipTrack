@@ -1,18 +1,20 @@
 import { useState } from 'react';
-import { ArrowLeft, ChevronRight, QrCode, Search } from 'lucide-react';
+import { ArrowLeft, CalendarClock, CheckCircle2, ChevronRight, QrCode, Search } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { ActivityTimeline } from '../../components/ActivityTimeline';
 import { EquipmentImage } from '../../components/EquipmentImage';
 import { QrCodeModal } from '../../components/QrCodeModal';
-import { EquipmentStatusLabel, FaultStatusLabel } from '../../components/StatusBadge';
+import { EquipmentStatusLabel, FaultStatusLabel, ServiceBadge } from '../../components/StatusBadge';
 import { useEquipTrack } from '../../context/EquipTrackContext';
+import { SERVICE_INTERVAL_HOURS } from '../../data/seedData';
 import { DashboardLayout } from '../../layouts/DashboardLayout';
 import { Equipment, EquipmentStatus, EquipmentType } from '../../types';
-import { formatDateTime, getSiteName } from '../../utils/formatters';
+import { formatDateTime, getServiceStatus, getSiteName } from '../../utils/formatters';
 
 export function SupervisorEquipmentPage() {
   const { equipmentId } = useParams<{ equipmentId?: string }>();
-  const { state, selectedSite, setEquipmentStatusManual } = useEquipTrack();
+  const { state, selectedSite, setEquipmentStatusManual, recordService } = useEquipTrack();
+  const [serviceNotice, setServiceNotice] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<EquipmentType | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<EquipmentStatus | 'all'>('all');
@@ -89,7 +91,10 @@ export function SupervisorEquipmentPage() {
                     {eq.manufacturer} {eq.model} ({eq.year})
                   </p>
                 </div>
-                <EquipmentStatusLabel status={eq.status} />
+                <div className="flex flex-wrap items-center gap-2">
+                  <EquipmentStatusLabel status={eq.status} />
+                  <ServiceBadge equipment={eq} />
+                </div>
               </div>
 
               <dl className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-3 border-t border-slate-100 text-xs">
@@ -128,6 +133,59 @@ export function SupervisorEquipmentPage() {
                   </dd>
                 </div>
               </dl>
+
+              {/* Scheduled servicing */}
+              {(() => {
+                const svc = getServiceStatus(eq);
+                if (svc.dueAt === null) return null;
+                const tone =
+                  svc.state === 'overdue'
+                    ? 'bg-red-50 border-red-200'
+                    : svc.state === 'soon'
+                    ? 'bg-amber-50 border-amber-200'
+                    : 'bg-slate-50 border-slate-200';
+                return (
+                  <div className={`rounded-xl border p-3 flex flex-wrap items-center justify-between gap-3 ${tone}`}>
+                    <div className="text-xs">
+                      <div className="font-semibold text-slate-500 flex items-center gap-1.5">
+                        <CalendarClock className="w-3.5 h-3.5" />
+                        Scheduled Service
+                      </div>
+                      <div className="mt-0.5 text-sm font-semibold text-slate-900">
+                        Due at {svc.dueAt.toLocaleString()} hrs
+                        <span className="font-normal text-slate-600">
+                          {' '}
+                          ·{' '}
+                          {svc.remaining > 0
+                            ? `${svc.remaining.toLocaleString()} hrs remaining`
+                            : `${Math.abs(svc.remaining).toLocaleString()} hrs overdue`}
+                        </span>
+                      </div>
+                      <div className="text-slate-500 mt-0.5">Every {SERVICE_INTERVAL_HOURS} operating hours</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        recordService(eq.id);
+                        setServiceNotice(
+                          `Service recorded for ${eq.id}. Next service due at ${(eq.hourMeter + SERVICE_INTERVAL_HOURS).toLocaleString()} hrs.`
+                        );
+                        setTimeout(() => setServiceNotice(null), 4000);
+                      }}
+                      className="min-h-[40px] px-3.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-800 inline-flex items-center gap-1.5"
+                    >
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      Mark Service Done
+                    </button>
+                  </div>
+                );
+              })()}
+
+              {serviceNotice && (
+                <div role="status" className="rounded-xl bg-emerald-50 border border-emerald-200 px-3.5 py-2.5 text-xs font-semibold text-emerald-800">
+                  {serviceNotice}
+                </div>
+              )}
 
               {eq.notes && (
                 <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 text-xs">
@@ -263,6 +321,7 @@ export function SupervisorEquipmentPage() {
                       </div>
                       <div className="mt-1.5 flex flex-wrap items-center gap-2">
                         <EquipmentStatusLabel status={eq.status} />
+                        <ServiceBadge equipment={eq} />
                         {openFaults > 0 && (
                           <span className="text-xs font-semibold text-red-700">
                             {openFaults} open fault{openFaults === 1 ? '' : 's'}
@@ -286,6 +345,7 @@ export function SupervisorEquipmentPage() {
                   <th className="py-3 px-4">Site</th>
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4">Last Pre-Start</th>
+                  <th className="py-3 px-4">Next Service</th>
                   <th className="py-3 px-4 text-right">Open Faults</th>
                   <th className="py-3 px-4">Assigned Operator</th>
                   <th className="py-3 px-4 text-right">QR</th>
@@ -319,6 +379,9 @@ export function SupervisorEquipmentPage() {
                       </td>
                       <td className="py-3 px-4 font-mono tabular-nums text-xs text-slate-600 whitespace-nowrap">
                         {formatDateTime(eq.lastInspectionAt)}
+                      </td>
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <ServiceBadge equipment={eq} showOk />
                       </td>
                       <td className="py-3 px-4 text-right font-mono tabular-nums font-bold text-slate-900">
                         {openFaults}

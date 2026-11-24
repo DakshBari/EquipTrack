@@ -50,11 +50,17 @@ export function SiteLocationMap({
       scrollWheelZoom: false,
     });
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-      subdomains: 'abcd',
-      maxZoom: 19,
-    }).addTo(map);
+    // CARTO basemaps now require an API key (tiles come back as an "API KEY
+    // REQUIRED" watermark), and OpenStreetMap's volunteer servers block app
+    // traffic, so use Esri's keyless street basemap. Esri tiles are {z}/{y}/{x}.
+    L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+      {
+        attribution:
+          'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, USGS, NGA, EPA, USDA, NPS, &copy; OpenStreetMap contributors',
+        maxZoom: 19,
+      }
+    ).addTo(map);
 
     const group = L.layerGroup().addTo(map);
     mapRef.current = map;
@@ -160,14 +166,14 @@ export function SiteLocationMap({
         }
       });
 
-      if (onlyShowSiteId && visibleSites.length === 1) {
-        marker.openPopup();
-      }
     });
 
     if (onlyShowSiteId && visibleSites.length === 1) {
+      // Centre on the single site. The popup isn't auto-opened: on these compact
+      // maps it is taller than the map and pushes the pin out of view (the site
+      // name and address are already shown beside the map; tap the pin for more).
       const target = visibleSites[0];
-      map.setView([target.latitude, target.longitude], 14, { animate: true });
+      map.setView([target.latitude, target.longitude], 14, { animate: false });
     } else if (focusedSiteId !== 'all') {
       const target = visibleSites.find((s) => s.id === focusedSiteId);
       if (target) {

@@ -7,20 +7,17 @@ import {
   ExternalLink,
   Lock,
   MapPin,
-  Monitor,
   Play,
   Plus,
-  Smartphone,
   Wrench,
 } from 'lucide-react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { EquipmentImage } from '../../components/EquipmentImage';
 import { PhotoAttachField } from '../../components/PhotoAttachField';
 import { SiteLocationMap } from '../../components/SiteLocationMap';
 import { EquipmentStatusLabel, FaultStatusLabel, SeverityText } from '../../components/StatusBadge';
 import { VoiceTextInput } from '../../components/VoiceTextInput';
 import { useEquipTrack } from '../../context/EquipTrackContext';
-import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { SAMPLE_FAULT_PHOTO } from '../../data/seedData';
 import { formatDateTime, getSiteName } from '../../utils/formatters';
 
@@ -32,17 +29,27 @@ export function MaintenanceFaultPage() {
   const {
     state,
     currentUser,
-    phoneFrameMode,
-    setPhoneFrameMode,
     acknowledgeFault,
     startMaintenanceWork,
     addMaintenanceUpdate,
     completeMaintenanceWork,
-    loginAsRole,
   } = useEquipTrack();
   const navigate = useNavigate();
-  const isDesktop = useMediaQuery('(min-width: 768px)');
-  const showFrame = phoneFrameMode && isDesktop;
+  const location = useLocation();
+
+  // Go back to wherever the user came from. A contractor who opened the link
+  // straight from an SMS/email has no in-app history, so send them somewhere useful.
+  const handleBack = () => {
+    if (location.key !== 'default') {
+      navigate(-1);
+    } else if (currentUser?.role === 'supervisor' || currentUser?.role === 'admin') {
+      navigate(`/supervisor/faults/${faultId}`);
+    } else if (currentUser?.role === 'operator') {
+      navigate('/operator');
+    } else {
+      navigate('/login');
+    }
+  };
 
   const fault = state.faults.find(
     (f) => f.id.toUpperCase() === (faultId || '').toUpperCase()
@@ -111,8 +118,16 @@ export function MaintenanceFaultPage() {
     <div className="flex flex-col min-h-full bg-slate-50 text-slate-900">
       {/* Compact Sticky Contractor Header */}
       <header className="sticky top-0 z-30 h-12 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 flex items-center justify-between gap-2 shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <Wrench className="w-4 h-4 text-blue-700 shrink-0" />
+        <div className="flex items-center gap-1.5 min-w-0">
+          <button
+            type="button"
+            onClick={handleBack}
+            className="min-h-[40px] px-2 -ml-2 rounded-lg text-sm font-semibold text-blue-700 hover:bg-blue-50 whitespace-nowrap shrink-0"
+          >
+            ← Back
+          </button>
+          <span className="w-px h-5 bg-slate-200 shrink-0" aria-hidden />
+          <Wrench className="w-4 h-4 text-blue-700 shrink-0 ml-1" />
           <span className="text-sm font-bold text-slate-900 truncate">EquipTrack Maintenance</span>
         </div>
         <span className="text-xs font-mono font-semibold text-slate-600 shrink-0">{fault.id}</span>
@@ -515,66 +530,12 @@ export function MaintenanceFaultPage() {
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col">
-      {/* Presenter Utility Bar on Desktop */}
-      <div className="hidden md:flex items-center justify-between px-6 py-2.5 bg-slate-900 text-slate-200 border-b border-slate-800">
-        <div className="flex items-center gap-3 text-xs">
-          <span className="font-semibold text-white">Contractor Mobile Portal</span>
-          <span className="text-slate-400">·</span>
-          <span className="font-mono text-slate-300">/maintenance/fault/{fault.id}</span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="inline-flex items-center rounded-lg bg-slate-800 p-0.5 border border-slate-700">
-            <button
-              type="button"
-              onClick={() => setPhoneFrameMode(false)}
-              className={`px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1.5 ${
-                !phoneFrameMode ? 'bg-blue-700 text-white' : 'text-slate-300'
-              }`}
-            >
-              <Monitor className="w-3.5 h-3.5" />
-              Responsive Full
-            </button>
-            <button
-              type="button"
-              onClick={() => setPhoneFrameMode(true)}
-              className={`px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1.5 ${
-                phoneFrameMode ? 'bg-blue-700 text-white' : 'text-slate-300'
-              }`}
-            >
-              <Smartphone className="w-3.5 h-3.5" />
-              Mobile Frame (390px)
-            </button>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              if (!currentUser || currentUser.role !== 'supervisor') {
-                loginAsRole('supervisor');
-              }
-              navigate(`/supervisor/faults/${fault.id}`);
-            }}
-            className="px-3 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-800 text-xs font-semibold text-white"
-          >
-            Review in Supervisor Dashboard
-          </button>
+      {/* Full responsive view, same as the operator pages */}
+      <div className="flex-1 flex flex-col">
+        <div className="w-full max-w-5xl mx-auto flex-1 flex flex-col bg-slate-50 md:border-x md:border-slate-200">
+          {mobileContent}
         </div>
       </div>
-
-      {showFrame ? (
-        <div className="flex flex-1 items-center justify-center py-6 px-4 bg-slate-200/80">
-          <div className="w-[390px] h-[780px] rounded-[36px] border-[8px] border-slate-900 bg-slate-50 shadow-2xl overflow-y-auto overflow-x-hidden flex flex-col">
-            {mobileContent}
-          </div>
-        </div>
-      ) : (
-        <div className="flex-1 flex flex-col">
-          <div className="w-full max-w-3xl mx-auto flex-1 flex flex-col bg-slate-50 md:border-x md:border-slate-200">
-            {mobileContent}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

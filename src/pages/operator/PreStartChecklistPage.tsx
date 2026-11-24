@@ -8,6 +8,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { VoiceTextInput } from '../../components/VoiceTextInput';
 import { SAMPLE_FAULT_PHOTO } from '../../data/seedData';
 import { useEquipTrack } from '../../context/EquipTrackContext';
 import { MobileOperatorLayout } from '../../layouts/MobileOperatorLayout';
@@ -420,16 +421,20 @@ export function PreStartChecklistPage() {
                 {isFail && (
                   <div className="pt-2 border-t border-red-200/70 space-y-3">
                     <div>
-                      <label className="block text-xs font-semibold text-red-900 mb-1">
+                      <label
+                        htmlFor={`fault-notes-${item.id}`}
+                        className="block text-xs font-semibold text-red-900 mb-1"
+                      >
                         Fault Description / Operator Notes
                         {item.requireNotesOnFail ? ' (Required)' : ' (Optional)'}
                       </label>
-                      <textarea
+                      <VoiceTextInput
+                        id={`fault-notes-${item.id}`}
                         rows={2}
+                        tone="danger"
                         value={draft.notes}
-                        onChange={(e) => updateDraft(item.id, { notes: e.target.value })}
+                        onChange={(notes) => updateDraft(item.id, { notes })}
                         placeholder="Describe the defect, leak, noise, or safety concern..."
-                        className="w-full rounded-xl border border-red-200 bg-white p-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-600"
                       />
                     </div>
 

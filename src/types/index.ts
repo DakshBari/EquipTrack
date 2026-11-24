@@ -34,6 +34,8 @@ export interface Site {
   bayCount: number;
   latitude: number;
   longitude: number;
+  /** Local shift start time, "HH:MM" (pre-starts are expected after this). */
+  shiftStart?: string;
 }
 
 export interface User {
@@ -65,6 +67,8 @@ export interface Equipment {
   imageUrl: string;
   /** Admin-maintained description / internal notes (optional; older saved data has none). */
   notes?: string;
+  /** Hour-meter reading at which the next scheduled service is due. */
+  nextServiceDueHours?: number;
 }
 
 export interface ChecklistItemTemplate {

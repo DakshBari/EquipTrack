@@ -26,7 +26,13 @@ import { SiteLocationMap } from '../../components/SiteLocationMap';
 import { EquipmentStatusLabel, FaultStatusLabel } from '../../components/StatusBadge';
 import { useEquipTrack } from '../../context/EquipTrackContext';
 import { DashboardLayout } from '../../layouts/DashboardLayout';
-import { formatDateTime, getSiteName, isToday } from '../../utils/formatters';
+import {
+  describeShiftStart,
+  formatDateTime,
+  formatRelativeTime,
+  getSiteName,
+  isToday,
+} from '../../utils/formatters';
 
 export function SupervisorOverviewPage() {
   const { state, selectedSite, setSelectedSite } = useEquipTrack();
@@ -154,6 +160,14 @@ export function SupervisorOverviewPage() {
 
   const restrictedEquipment = filteredEquipment.filter((e) => e.status !== 'Operational');
 
+  // Same rule as the Pending Pre-Starts KPI, listed so the supervisor can follow up.
+  const notCheckedToday = filteredEquipment.filter(
+    (e) => e.status === 'Operational' && !isToday(e.lastInspectionAt)
+  );
+  const notCheckedBySite = state.sites
+    .map((site) => ({ site, items: notCheckedToday.filter((e) => e.siteId === site.id) }))
+    .filter((g) => g.items.length > 0);
+
   const urgentAndReviewFaults = filteredFaults.filter((f) =>
     ['Urgent', 'Awaiting Review', 'Awaiting Return-to-Service Approval', 'Maintenance Completed'].includes(
       f.status
@@ -243,7 +257,14 @@ export function SupervisorOverviewPage() {
               {completedTodayCount}
             </div>
           </div>
-          <div className="rounded-2xl bg-white border border-slate-200 p-4">
+          <a
+            href="#not-checked"
+            onClick={(e) => {
+              e.preventDefault();
+              document.getElementById('not-checked')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }}
+            className="rounded-2xl bg-white border border-slate-200 hover:border-amber-400 p-4 transition-colors"
+          >
             <div className="text-xs text-amber-700 flex items-center gap-1">
               <Clock className="w-3.5 h-3.5" />
               Pending Pre-Starts
@@ -251,7 +272,10 @@ export function SupervisorOverviewPage() {
             <div className="text-2xl font-bold font-mono tabular-nums text-amber-700 mt-1">
               {pendingPreStartsCount}
             </div>
-          </div>
+            {pendingPreStartsCount > 0 && (
+              <div className="text-[11px] font-semibold text-amber-700 mt-0.5">View list ↓</div>
+            )}
+          </a>
           <div className="rounded-2xl bg-white border border-slate-200 p-4">
             <div className="text-xs text-amber-800 flex items-center gap-1">
               <AlertTriangle className="w-3.5 h-3.5" />
@@ -282,6 +306,76 @@ export function SupervisorOverviewPage() {
               {resolvedFaultsCount}
             </div>
           </div>
+        </section>
+
+        {/* Machines still waiting for today's pre-start, grouped by site */}
+        <section
+          id="not-checked"
+          className="rounded-2xl bg-white border border-slate-200 p-4 sm:p-5 scroll-mt-20"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-2">
+              <Clock className="w-5 h-5 text-amber-600" />
+              <h2 className="text-sm font-bold text-slate-900">
+                Not Checked Yet Today ({notCheckedToday.length})
+              </h2>
+            </div>
+            <span className="text-xs text-slate-500">Operational machines without a pre-start today</span>
+          </div>
+
+          {notCheckedToday.length === 0 ? (
+            <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm font-semibold text-emerald-800 flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4" />
+              All operational equipment has been checked today.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {notCheckedBySite.map(({ site, items }) => {
+                const shift = describeShiftStart(site.shiftStart);
+                return (
+                  <div key={site.id}>
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs mb-2">
+                      <span className="font-bold text-slate-700">{site.name}</span>
+                      <span className={shift.started ? 'font-semibold text-amber-700' : 'text-slate-500'}>
+                        {shift.label}
+                      </span>
+                    </div>
+                    <ul className="rounded-xl border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+                      {items.map((eq) => {
+                        const operator = state.users.find((u) => u.id === eq.assignedOperatorId);
+                        return (
+                          <li key={eq.id}>
+                            <Link
+                              to={`/supervisor/equipment/${eq.id}`}
+                              className="px-3.5 py-2.5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-x-4 gap-y-1 hover:bg-slate-50"
+                            >
+                              <div className="min-w-0">
+                                <div className="text-sm font-semibold text-slate-900 truncate">
+                                  {eq.name}{' '}
+                                  <span className="text-xs font-mono text-slate-500">({eq.id})</span>
+                                </div>
+                                <div className="text-xs text-slate-500">
+                                  Last pre-start {formatRelativeTime(eq.lastInspectionAt)}
+                                </div>
+                              </div>
+                              <div className="text-xs text-right shrink-0">
+                                <div className="font-semibold text-slate-800">
+                                  {operator?.name || 'Pool allocation'}
+                                </div>
+                                {operator?.phone && (
+                                  <div className="font-mono text-slate-500">{operator.phone}</div>
+                                )}
+                              </div>
+                            </Link>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </section>
 
         {/* 4 Live Recharts Analytics Charts */}

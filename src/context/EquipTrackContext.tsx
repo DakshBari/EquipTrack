@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { createInitialSeedData } from '../data/seedData';
+import { createInitialSeedData, defaultServiceDue, SERVICE_INTERVAL_HOURS } from '../data/seedData';
 import {
   ActivityEvent,
   AppNotification,
@@ -84,6 +84,8 @@ interface EquipTrackContextValue {
   addEquipment: (eq: Omit<Equipment, 'lastInspectionAt'>) => void;
   updateEquipment: (eq: Equipment) => void;
   setEquipmentStatusManual: (equipmentId: string, status: EquipmentStatus) => void;
+  /** Log a completed scheduled service and set the next due point. */
+  recordService: (equipmentId: string) => void;
   addUser: (user: Omit<User, 'id' | 'initials'>) => void;
   updateUser: (user: User) => void;
   updateSite: (site: Site) => void;
@@ -107,9 +109,16 @@ function loadState(): EquipTrackState {
             ...site,
             latitude: typeof site.latitude === 'number' ? site.latitude : fallback?.latitude ?? -32.0669,
             longitude: typeof site.longitude === 'number' ? site.longitude : fallback?.longitude ?? 115.9129,
+            shiftStart: site.shiftStart || fallback?.shiftStart || '06:00',
           };
         });
-        return { ...parsed, sites: hydratedSites };
+        // Older saved data predates scheduled servicing.
+        const hydratedEquipment = parsed.equipment.map((eq) =>
+          typeof eq.nextServiceDueHours === 'number'
+            ? eq
+            : { ...eq, nextServiceDueHours: defaultServiceDue(eq) }
+        );
+        return { ...parsed, sites: hydratedSites, equipment: hydratedEquipment };
       }
     }
   } catch {
@@ -861,6 +870,7 @@ export function EquipTrackProvider({ children }: { children: React.ReactNode }) 
     const now = new Date().toISOString();
     const newEq: Equipment = {
       ...eq,
+      nextServiceDueHours: eq.nextServiceDueHours ?? defaultServiceDue(eq),
       lastInspectionAt: now,
     };
     setState((prev) => ({
@@ -902,6 +912,32 @@ export function EquipTrackProvider({ children }: { children: React.ReactNode }) 
           actorRole: actor.roleTitle,
           action: `Status Changed to ${status}`,
           details: `Manual status update by ${actor.name}.`,
+          timestamp: now,
+        },
+        ...prev.activities,
+      ],
+    }));
+  };
+
+  const recordService = (equipmentId: string) => {
+    const actor = currentUser || state.users[1];
+    const now = new Date().toISOString();
+    const eq = state.equipment.find((e) => e.id === equipmentId);
+    if (!eq) return;
+    const nextDue = eq.hourMeter + SERVICE_INTERVAL_HOURS;
+    setState((prev) => ({
+      ...prev,
+      equipment: prev.equipment.map((e) =>
+        e.id === equipmentId ? { ...e, nextServiceDueHours: nextDue } : e
+      ),
+      activities: [
+        {
+          id: `act-${Date.now()}-service`,
+          equipmentId,
+          actorName: actor.name,
+          actorRole: actor.roleTitle,
+          action: 'Scheduled Service Completed',
+          details: `Serviced at ${eq.hourMeter.toLocaleString()} hrs. Next service due at ${nextDue.toLocaleString()} hrs.`,
           timestamp: now,
         },
         ...prev.activities,
@@ -995,6 +1031,7 @@ export function EquipTrackProvider({ children }: { children: React.ReactNode }) 
         addEquipment,
         updateEquipment,
         setEquipmentStatusManual,
+        recordService,
         addUser,
         updateUser,
         updateSite,

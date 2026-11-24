@@ -4,12 +4,12 @@ import { Link } from 'react-router-dom';
 import { QrCodeModal } from '../../components/QrCodeModal';
 import { Sheet } from '../../components/Sheet';
 import { VoiceTextInput } from '../../components/VoiceTextInput';
-import { EquipmentStatusLabel } from '../../components/StatusBadge';
+import { EquipmentStatusLabel, ServiceBadge } from '../../components/StatusBadge';
 import { useEquipTrack } from '../../context/EquipTrackContext';
-import { EQUIPMENT_IMAGES } from '../../data/seedData';
+import { defaultServiceDue, EQUIPMENT_IMAGES, SERVICE_INTERVAL_HOURS } from '../../data/seedData';
 import { DashboardLayout } from '../../layouts/DashboardLayout';
 import { Equipment, EquipmentStatus, EquipmentType, SiteId } from '../../types';
-import { formatDateTime, getSiteName } from '../../utils/formatters';
+import { formatDateTime, getSiteName, SERVICE_DUE_SOON_HOURS } from '../../utils/formatters';
 
 export function AdminEquipmentPage() {
   const { state, selectedSite, addEquipment, updateEquipment } = useEquipTrack();
@@ -29,6 +29,7 @@ export function AdminEquipmentPage() {
   const [formHourMeter, setFormHourMeter] = useState('0');
   const [formOperatorId, setFormOperatorId] = useState('usr-op-1');
   const [formNotes, setFormNotes] = useState('');
+  const [formServiceDue, setFormServiceDue] = useState('');
 
   const operators = state.users.filter((u) => u.role === 'operator');
 
@@ -45,6 +46,7 @@ export function AdminEquipmentPage() {
     setFormHourMeter('100');
     setFormOperatorId(operators[0]?.id || 'usr-op-1');
     setFormNotes('');
+    setFormServiceDue(String(SERVICE_INTERVAL_HOURS * 2));
     setShowAdd(true);
   };
 
@@ -61,11 +63,18 @@ export function AdminEquipmentPage() {
     setFormHourMeter(String(eq.hourMeter));
     setFormOperatorId(eq.assignedOperatorId);
     setFormNotes(eq.notes || '');
+    setFormServiceDue(String(eq.nextServiceDueHours ?? defaultServiceDue(eq)));
     setShowAdd(true);
   };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    const hours = Number(formHourMeter) || 0;
+    const serviceDue = Number(formServiceDue);
+    const nextServiceDueHours =
+      Number.isFinite(serviceDue) && serviceDue > 0
+        ? serviceDue
+        : defaultServiceDue({ id: formId, hourMeter: hours });
     if (editing) {
       updateEquipment({
         ...editing,
@@ -76,10 +85,11 @@ export function AdminEquipmentPage() {
         model: formModel.trim(),
         serialNumber: formSerial.trim(),
         status: formStatus,
-        hourMeter: Number(formHourMeter) || 0,
+        hourMeter: hours,
         assignedOperatorId: formOperatorId,
         imageUrl: EQUIPMENT_IMAGES[formType],
         notes: formNotes.trim() || undefined,
+        nextServiceDueHours,
       });
     } else {
       addEquipment({
@@ -91,11 +101,12 @@ export function AdminEquipmentPage() {
         model: formModel.trim(),
         serialNumber: formSerial.trim(),
         year: 2025,
-        hourMeter: Number(formHourMeter) || 0,
+        hourMeter: hours,
         status: formStatus,
         assignedOperatorId: formOperatorId,
         imageUrl: EQUIPMENT_IMAGES[formType],
         notes: formNotes.trim() || undefined,
+        nextServiceDueHours,
       });
     }
     setShowAdd(false);
@@ -156,7 +167,10 @@ export function AdminEquipmentPage() {
                       {eq.type} · {getSiteName(eq.siteId)} · {eq.manufacturer} {eq.model}
                     </div>
                   </div>
-                  <EquipmentStatusLabel status={eq.status} />
+                  <div className="flex flex-col items-end gap-1.5">
+                    <EquipmentStatusLabel status={eq.status} />
+                    <ServiceBadge equipment={eq} />
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <button
@@ -213,7 +227,10 @@ export function AdminEquipmentPage() {
                     <td className="py-3 px-4 text-slate-700">{eq.type}</td>
                     <td className="py-3 px-4 text-slate-600">{getSiteName(eq.siteId)}</td>
                     <td className="py-3 px-4">
-                      <EquipmentStatusLabel status={eq.status} />
+                      <div className="flex flex-col items-start gap-1.5">
+                        <EquipmentStatusLabel status={eq.status} />
+                        <ServiceBadge equipment={eq} />
+                      </div>
                     </td>
                     <td className="py-3 px-4 font-mono text-xs text-slate-500">
                       {formatDateTime(eq.lastInspectionAt)}
@@ -376,6 +393,40 @@ export function AdminEquipmentPage() {
               ))}
             </select>
           </div>
+
+          <div>
+            <label htmlFor="equipment-hours" className="block text-xs font-semibold text-slate-700 mb-1">
+              Hour Meter (hrs)
+            </label>
+            <input
+              id="equipment-hours"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              value={formHourMeter}
+              onChange={(e) => setFormHourMeter(e.target.value)}
+              className="w-full min-h-[44px] px-3 rounded-xl border border-slate-200 text-sm font-mono"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="equipment-service-due" className="block text-xs font-semibold text-slate-700 mb-1">
+              Next Service Due (hrs)
+            </label>
+            <input
+              id="equipment-service-due"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              value={formServiceDue}
+              onChange={(e) => setFormServiceDue(e.target.value)}
+              className="w-full min-h-[44px] px-3 rounded-xl border border-slate-200 text-sm font-mono"
+            />
+            <p className="mt-1 text-[11px] text-slate-500">
+              Service every {SERVICE_INTERVAL_HOURS} hrs. Flagged amber within {SERVICE_DUE_SOON_HOURS} hrs.
+            </p>
+          </div>
+
           <VoiceTextInput
             id="equipment-notes"
             className="sm:col-span-2"

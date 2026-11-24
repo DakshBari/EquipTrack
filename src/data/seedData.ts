@@ -54,6 +54,7 @@ const sites: Site[] = [
     bayCount: 14,
     latitude: -32.0669,
     longitude: 115.9129,
+    shiftStart: '06:00',
   },
   {
     id: 'jandakot',
@@ -67,6 +68,7 @@ const sites: Site[] = [
     bayCount: 12,
     latitude: -32.0976,
     longitude: 115.8657,
+    shiftStart: '05:30',
   },
 ];
 
@@ -1679,11 +1681,29 @@ const notifications: AppNotification[] = [
   },
 ];
 
+/** Routine service interval used across the demo fleet. */
+export const SERVICE_INTERVAL_HOURS = 250;
+
+/** Demo overrides so the fleet shows a mix of due-soon and overdue services. */
+const SEED_SERVICE_DUE: Record<string, number> = {
+  'FL-001': 2150, // due in 10 hrs
+  'TR-001': 3600, // overdue by 10 hrs
+  'FL-002': 2000,
+};
+
+/** Next multiple of the service interval above the current hour meter. */
+export function defaultServiceDue(eq: Pick<Equipment, 'id' | 'hourMeter'>): number {
+  return (
+    SEED_SERVICE_DUE[eq.id] ??
+    (Math.floor(eq.hourMeter / SERVICE_INTERVAL_HOURS) + 1) * SERVICE_INTERVAL_HOURS
+  );
+}
+
 export function createInitialSeedData(): EquipTrackState {
   return {
     sites,
     users,
-    equipment,
+    equipment: equipment.map((eq) => ({ ...eq, nextServiceDueHours: defaultServiceDue(eq) })),
     templates,
     inspections,
     faults,

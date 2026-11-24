@@ -160,3 +160,36 @@ export function localDateISO(offsetDays = 0): string {
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
+
+/** Hours remaining before a service is considered "due soon". */
+export const SERVICE_DUE_SOON_HOURS = 25;
+
+export type ServiceState = 'ok' | 'soon' | 'overdue';
+
+export function getServiceStatus(eq: { hourMeter: number; nextServiceDueHours?: number }): {
+  dueAt: number | null;
+  remaining: number;
+  state: ServiceState;
+} {
+  if (typeof eq.nextServiceDueHours !== 'number') return { dueAt: null, remaining: Infinity, state: 'ok' };
+  const remaining = eq.nextServiceDueHours - eq.hourMeter;
+  return {
+    dueAt: eq.nextServiceDueHours,
+    remaining,
+    state: remaining <= 0 ? 'overdue' : remaining <= SERVICE_DUE_SOON_HOURS ? 'soon' : 'ok',
+  };
+}
+
+/** Today's shift start for an "HH:MM" string, plus a short human label. */
+export function describeShiftStart(shiftStart = '06:00'): { started: boolean; label: string } {
+  const [h, m] = shiftStart.split(':').map(Number);
+  const start = new Date();
+  start.setHours(h || 0, m || 0, 0, 0);
+  const diffMins = Math.round((Date.now() - start.getTime()) / 60000);
+  if (diffMins < 0) return { started: false, label: `Shift starts ${shiftStart}` };
+  if (diffMins > 12 * 60) return { started: true, label: `Shift started ${shiftStart}` };
+  const hrs = Math.floor(diffMins / 60);
+  const mins = diffMins % 60;
+  const ago = hrs > 0 ? `${hrs}h ${mins}m ago` : `${mins}m ago`;
+  return { started: true, label: `Shift started ${shiftStart} (${ago})` };
+}
