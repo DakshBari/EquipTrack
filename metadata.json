@@ -1,0 +1,6 @@
+{
+  "name": "EquipTrack",
+  "description": "Mobile-first industrial equipment pre-start inspection, fault triage, and maintenance management platform for Australian industrial sites.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": []
+}

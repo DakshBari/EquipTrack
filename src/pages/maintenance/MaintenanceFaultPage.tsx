@@ -1,0 +1,571 @@
+import React, { useState } from 'react';
+import {
+  AlertOctagon,
+  Camera,
+  CheckCircle2,
+  ClipboardCheck,
+  ImagePlus,
+  Lock,
+  Monitor,
+  Play,
+  Plus,
+  Smartphone,
+  Trash2,
+  Wrench,
+} from 'lucide-react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { EquipmentImage } from '../../components/EquipmentImage';
+import { EquipmentStatusLabel, FaultStatusLabel, SeverityText } from '../../components/StatusBadge';
+import { useEquipTrack } from '../../context/EquipTrackContext';
+import { SAMPLE_FAULT_PHOTO } from '../../data/seedData';
+import { formatDateTime, getSiteName } from '../../utils/formatters';
+
+export function MaintenanceFaultPage() {
+  const { faultId } = useParams<{ faultId: string }>();
+  const {
+    state,
+    currentUser,
+    phoneFrameMode,
+    setPhoneFrameMode,
+    acknowledgeFault,
+    startMaintenanceWork,
+    addMaintenanceUpdate,
+    completeMaintenanceWork,
+    loginAsRole,
+  } = useEquipTrack();
+  const navigate = useNavigate();
+
+  const fault = state.faults.find(
+    (f) => f.id.toUpperCase() === (faultId || '').toUpperCase()
+  );
+  const equipment = fault
+    ? state.equipment.find((e) => e.id === fault.equipmentId)
+    : undefined;
+  const assignedContact = fault?.assignedContactId
+    ? state.maintenanceContacts.find((c) => c.id === fault.assignedContactId)
+    : undefined;
+
+  const [contractorName, setContractorName] = useState(
+    assignedContact?.name || state.maintenanceContacts[0]?.name || 'Michael Brown'
+  );
+  const [updateNote, setUpdateNote] = useState('');
+  const [updatePhotos, setUpdatePhotos] = useState<string[]>([]);
+  const [showCompleteForm, setShowCompleteForm] = useState(false);
+  const [completionSummary, setCompletionSummary] = useState('');
+  const [completionPhotos, setCompletionPhotos] = useState<string[]>([]);
+  const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
+
+  const handleFileChange = (
+    setter: React.Dispatch<React.SetStateAction<string[]>>,
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const files = e.target.files;
+    if (!files) return;
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          setter((prev) => [...prev, reader.result as string]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+  };
+
+  const notify = (msg: string) => {
+    setFeedbackMsg(msg);
+    setTimeout(() => setFeedbackMsg(null), 4000);
+  };
+
+  if (!fault || !equipment) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full rounded-2xl bg-white border border-slate-200 p-6 text-center space-y-3">
+          <h1 className="text-lg font-bold text-slate-900">Fault Report Not Found</h1>
+          <p className="text-sm text-slate-600">
+            The fault link <span className="font-mono">{faultId}</span> does not match an active or
+            archived fault record.
+          </p>
+          <Link
+            to="/login"
+            className="inline-flex min-h-[44px] items-center px-4 rounded-xl bg-blue-700 text-white text-sm font-semibold"
+          >
+            Return to EquipTrack Login
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const isCompletedOrResolved =
+    fault.status === 'Maintenance Completed' ||
+    fault.status === 'Awaiting Return-to-Service Approval' ||
+    fault.status === 'Resolved';
+
+  const priorFaults = state.faults.filter(
+    (f) => f.equipmentId === equipment.id && f.id !== fault.id
+  );
+
+  const mobileContent = (
+    <div className="flex flex-col min-h-full bg-slate-50 text-slate-900">
+      {/* Compact Sticky Contractor Header */}
+      <header className="sticky top-0 z-30 h-12 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 flex items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <Wrench className="w-4 h-4 text-blue-700 shrink-0" />
+          <span className="text-sm font-bold text-slate-900 truncate">
+            EquipTrack Maintenance
+          </span>
+        </div>
+        <span className="text-xs font-mono font-semibold text-slate-600 shrink-0">
+          {fault.id}
+        </span>
+      </header>
+
+      <div className="p-4 space-y-4 pb-10">
+        {/* Prototype Scoped Link Notice */}
+        <div className="rounded-xl bg-blue-50 border border-blue-200 px-3.5 py-2.5 text-xs text-blue-900 flex items-start gap-2">
+          <Lock className="w-3.5 h-3.5 text-blue-700 shrink-0 mt-0.5" />
+          <span>
+            Direct contractor link preview ({fault.id}). Production deployments enforce
+            authenticated, time-limited, revocable access tokens.
+          </span>
+        </div>
+
+        {feedbackMsg && (
+          <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-3.5 py-2.5 text-xs font-semibold text-emerald-800">
+            {feedbackMsg}
+          </div>
+        )}
+
+        {/* Equipment & Fault Header Card */}
+        <section className="rounded-2xl bg-white border border-slate-200 overflow-hidden">
+          <div className="flex items-center gap-3 p-4 border-b border-slate-100">
+            <EquipmentImage
+              src={equipment.imageUrl}
+              alt={equipment.name}
+              type={equipment.type}
+              className="w-20 h-16 rounded-xl shrink-0"
+            />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center justify-between gap-1.5">
+                <span className="text-xs font-mono text-slate-500">
+                  {equipment.id} · {getSiteName(fault.siteId)}
+                </span>
+                <SeverityText severity={fault.severity} />
+              </div>
+              <h1 className="text-base font-bold text-slate-900 mt-0.5">{equipment.name}</h1>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                <FaultStatusLabel status={fault.status} />
+                <EquipmentStatusLabel status={equipment.status} />
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 space-y-3 text-sm">
+            <div>
+              <div className="text-xs text-slate-500">Failed Checklist Item</div>
+              <div className="font-bold text-slate-900 mt-0.5">{fault.failedItem}</div>
+            </div>
+
+            <div>
+              <div className="text-xs text-slate-500">Operator Fault Notes</div>
+              <p className="text-slate-800 mt-0.5">{fault.description}</p>
+              <div className="text-xs text-slate-500 mt-1">
+                Reported by {fault.reportedByName} · {formatDateTime(fault.reportedAt)}
+              </div>
+            </div>
+
+            {fault.supervisorInstructions && (
+              <div className="rounded-xl bg-amber-50 border border-amber-200 p-3">
+                <div className="text-xs font-bold text-amber-900">Supervisor Instructions</div>
+                <p className="text-xs text-amber-800 mt-0.5">{fault.supervisorInstructions}</p>
+              </div>
+            )}
+
+            {fault.photos.length > 0 && (
+              <div>
+                <div className="text-xs text-slate-500 mb-1.5">
+                  Operator Fault Photographs ({fault.photos.length})
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {fault.photos.map((photo, idx) => (
+                    <img
+                      key={idx}
+                      src={photo}
+                      alt={`Fault evidence ${idx + 1}`}
+                      className="w-24 h-20 rounded-xl object-cover border border-slate-200"
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Contractor Identification */}
+        <section className="rounded-2xl bg-white border border-slate-200 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <label htmlFor="contractor-select" className="text-xs font-bold text-slate-700">
+              Acting Maintenance Technician
+            </label>
+            <select
+              id="contractor-select"
+              value={contractorName}
+              onChange={(e) => setContractorName(e.target.value)}
+              className="min-h-[38px] px-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-900"
+            >
+              {state.maintenanceContacts.map((c) => (
+                <option key={c.id} value={c.name}>
+                  {c.name} ({c.company})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Primary Lifecycle Actions */}
+          {!isCompletedOrResolved ? (
+            <div className="space-y-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {fault.status !== 'Acknowledged' &&
+                  fault.status !== 'In Progress' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        acknowledgeFault(fault.id, contractorName);
+                        notify(`Fault ${fault.id} acknowledged by ${contractorName}.`);
+                      }}
+                      className="min-h-[46px] px-4 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold flex items-center justify-center gap-2"
+                    >
+                      <ClipboardCheck className="w-4 h-4" />
+                      Acknowledge Fault
+                    </button>
+                  )}
+
+                {fault.status !== 'In Progress' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      startMaintenanceWork(fault.id, contractorName);
+                      notify(`Work started on ${equipment.id}.`);
+                    }}
+                    className="min-h-[46px] px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold flex items-center justify-center gap-2"
+                  >
+                    <Play className="w-4 h-4" />
+                    Start Work
+                  </button>
+                )}
+              </div>
+
+              {/* Add Progress Update + Work Photos */}
+              <div className="pt-2 border-t border-slate-100 space-y-2.5">
+                <label className="block text-xs font-bold text-slate-700">
+                  Add Maintenance Update / Upload Work Photos
+                </label>
+                <textarea
+                  rows={2}
+                  value={updateNote}
+                  onChange={(e) => setUpdateNote(e.target.value)}
+                  placeholder="Log parts replaced, diagnostic readings, or progress..."
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-700"
+                />
+
+                <div className="flex flex-wrap gap-2">
+                  <label className="min-h-[40px] px-3 py-1.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold text-slate-700 flex items-center gap-1.5 cursor-pointer">
+                    <Camera className="w-4 h-4 text-blue-700" />
+                    Upload Work Photo
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      multiple
+                      onChange={(e) => handleFileChange(setUpdatePhotos, e)}
+                      className="hidden"
+                    />
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => setUpdatePhotos((p) => [...p, equipment.imageUrl])}
+                    className="min-h-[40px] px-3 py-1.5 rounded-xl border border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 flex items-center gap-1.5"
+                  >
+                    <ImagePlus className="w-4 h-4" />
+                    Attach Demo Repair Photo
+                  </button>
+                </div>
+
+                {updatePhotos.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {updatePhotos.map((p, idx) => (
+                      <div key={idx} className="relative w-16 h-16 rounded-lg overflow-hidden border border-slate-200">
+                        <img src={p} alt="Work update" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => setUpdatePhotos((prev) => prev.filter((_, i) => i !== idx))}
+                          className="absolute top-0.5 right-0.5 w-5 h-5 rounded bg-slate-900/75 text-white flex items-center justify-center"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  disabled={!updateNote.trim() && updatePhotos.length === 0}
+                  onClick={() => {
+                    addMaintenanceUpdate(
+                      fault.id,
+                      contractorName,
+                      updateNote.trim() || 'Uploaded work progress photos.',
+                      updatePhotos
+                    );
+                    setUpdateNote('');
+                    setUpdatePhotos([]);
+                    notify('Maintenance update saved.');
+                  }}
+                  className="w-full min-h-[42px] rounded-xl border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 text-xs font-semibold text-slate-800 flex items-center justify-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Maintenance Update
+                </button>
+              </div>
+
+              {/* Mark Maintenance Completed */}
+              <div className="pt-2 border-t border-slate-100">
+                {!showCompleteForm ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowCompleteForm(true)}
+                    className="w-full min-h-[48px] rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold flex items-center justify-center gap-2"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    Mark Maintenance Completed
+                  </button>
+                ) : (
+                  <div className="rounded-xl bg-emerald-50/70 border border-emerald-200 p-3.5 space-y-3">
+                    <div className="text-xs font-bold text-emerald-900">
+                      Completion Sign-Off Summary
+                    </div>
+                    <textarea
+                      rows={3}
+                      value={completionSummary}
+                      onChange={(e) => setCompletionSummary(e.target.value)}
+                      placeholder="Summarise repairs completed, parts replaced, and functional test results..."
+                      className="w-full rounded-xl border border-emerald-300 bg-white p-2.5 text-sm text-slate-900"
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      <label className="min-h-[38px] px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-semibold text-slate-700 flex items-center gap-1.5 cursor-pointer">
+                        <Camera className="w-3.5 h-3.5" />
+                        Upload Completion Photo
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          multiple
+                          onChange={(e) => handleFileChange(setCompletionPhotos, e)}
+                          className="hidden"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCompletionPhotos((p) => [...p, equipment.imageUrl || SAMPLE_FAULT_PHOTO])
+                        }
+                        className="min-h-[38px] px-3 py-1.5 rounded-lg border border-emerald-300 bg-white text-xs font-semibold text-emerald-800 flex items-center gap-1.5"
+                      >
+                        <ImagePlus className="w-3.5 h-3.5" />
+                        Attach Demo Repair Photo
+                      </button>
+                    </div>
+                    {completionPhotos.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {completionPhotos.map((p, idx) => (
+                          <img
+                            key={idx}
+                            src={p}
+                            alt="Completion evidence"
+                            className="w-16 h-16 rounded-lg object-cover border border-emerald-200"
+                          />
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowCompleteForm(false)}
+                        className="flex-1 min-h-[42px] rounded-xl border border-slate-300 bg-white text-xs font-semibold text-slate-700"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!completionSummary.trim()}
+                        onClick={() => {
+                          completeMaintenanceWork(
+                            fault.id,
+                            contractorName,
+                            completionSummary.trim(),
+                            completionPhotos
+                          );
+                          setShowCompleteForm(false);
+                          notify(
+                            'Maintenance marked completed. Equipment remains restricted until supervisor return-to-service approval.'
+                          );
+                        }}
+                        className="flex-1 min-h-[42px] rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-xs font-bold"
+                      >
+                        Submit Completion
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-xl bg-amber-50 border border-amber-200 p-3.5 space-y-1.5">
+              <div className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                {fault.status === 'Resolved' ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-700" />
+                ) : (
+                  <AlertOctagon className="w-4 h-4 text-amber-700" />
+                )}
+                <span>
+                  {fault.status === 'Resolved'
+                    ? 'Maintenance Completed & Returned to Service'
+                    : 'Maintenance Completed — Awaiting Supervisor Approval'}
+                </span>
+              </div>
+              {fault.completionSummary && (
+                <p className="text-xs text-slate-700">{fault.completionSummary}</p>
+              )}
+              <p className="text-[11px] text-amber-800">
+                Note: Supervisor verification is required before the equipment hold is lifted.
+              </p>
+            </div>
+          )}
+        </section>
+
+        {/* Maintenance Progress Log */}
+        <section className="rounded-2xl bg-white border border-slate-200 p-4 space-y-3">
+          <h2 className="text-sm font-bold text-slate-900">
+            Maintenance Updates ({fault.maintenanceUpdates.length})
+          </h2>
+          {fault.maintenanceUpdates.length === 0 ? (
+            <p className="text-xs text-slate-500">No maintenance updates logged yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {fault.maintenanceUpdates.map((upd) => (
+                <div key={upd.id} className="rounded-xl bg-slate-50 border border-slate-200 p-3 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <span className="font-semibold text-slate-900">{upd.authorName}</span>
+                    <span className="font-mono text-slate-500">{formatDateTime(upd.timestamp)}</span>
+                  </div>
+                  <p className="text-xs text-slate-700">{upd.note}</p>
+                  {upd.photos.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {upd.photos.map((p, idx) => (
+                        <img
+                          key={idx}
+                          src={p}
+                          alt="Update attachment"
+                          className="w-16 h-16 rounded-lg object-cover border border-slate-200"
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Previous Fault History */}
+        {priorFaults.length > 0 && (
+          <section className="rounded-2xl bg-white border border-slate-200 p-4 space-y-2.5">
+            <h2 className="text-sm font-bold text-slate-900">
+              Previous Machine Faults ({priorFaults.length})
+            </h2>
+            {priorFaults.map((pf) => (
+              <div key={pf.id} className="text-xs border-b border-slate-100 last:border-b-0 pb-2 last:pb-0">
+                <div className="flex justify-between font-semibold text-slate-800">
+                  <span>
+                    {pf.id} · {pf.failedItem}
+                  </span>
+                  <span>{pf.status}</span>
+                </div>
+                <div className="text-slate-500 mt-0.5">{pf.description}</div>
+              </div>
+            ))}
+          </section>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-slate-100 flex flex-col">
+      {/* Presenter Utility Bar on Desktop */}
+      <div className="hidden md:flex items-center justify-between px-6 py-2.5 bg-slate-900 text-slate-200 border-b border-slate-800">
+        <div className="flex items-center gap-3 text-xs">
+          <span className="font-semibold text-white">Contractor Mobile Portal</span>
+          <span className="text-slate-400">·</span>
+          <span className="font-mono text-slate-300">/maintenance/fault/{fault.id}</span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div className="inline-flex items-center rounded-lg bg-slate-800 p-0.5 border border-slate-700">
+            <button
+              type="button"
+              onClick={() => setPhoneFrameMode(false)}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1.5 ${
+                !phoneFrameMode ? 'bg-blue-700 text-white' : 'text-slate-300'
+              }`}
+            >
+              <Monitor className="w-3.5 h-3.5" />
+              Responsive Full
+            </button>
+            <button
+              type="button"
+              onClick={() => setPhoneFrameMode(true)}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1.5 ${
+                phoneFrameMode ? 'bg-blue-700 text-white' : 'text-slate-300'
+              }`}
+            >
+              <Smartphone className="w-3.5 h-3.5" />
+              Mobile Frame (390px)
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (!currentUser || currentUser.role !== 'supervisor') {
+                loginAsRole('supervisor');
+              }
+              navigate(`/supervisor/faults/${fault.id}`);
+            }}
+            className="px-3 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-800 text-xs font-semibold text-white"
+          >
+            Review in Supervisor Dashboard
+          </button>
+        </div>
+      </div>
+
+      {phoneFrameMode ? (
+        <div className="hidden md:flex flex-1 items-center justify-center py-6 px-4 bg-slate-200/80">
+          <div className="w-[390px] h-[780px] rounded-[36px] border-[8px] border-slate-900 bg-slate-50 shadow-2xl overflow-y-auto overflow-x-hidden flex flex-col">
+            {mobileContent}
+          </div>
+        </div>
+      ) : null}
+
+      <div className={phoneFrameMode ? 'md:hidden flex-1 flex flex-col' : 'flex-1 flex flex-col'}>
+        <div className="w-full max-w-3xl mx-auto flex-1 flex flex-col bg-slate-50 md:border-x md:border-slate-200">
+          {mobileContent}
+        </div>
+      </div>
+    </div>
+  );
+}
