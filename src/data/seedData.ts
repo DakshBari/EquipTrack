@@ -52,6 +52,8 @@ const sites: Site[] = [
     managerName: 'Sarah Mitchell',
     phone: '+61 8 9455 2100',
     bayCount: 14,
+    latitude: -32.0669,
+    longitude: 115.9129,
   },
   {
     id: 'jandakot',
@@ -63,6 +65,8 @@ const sites: Site[] = [
     managerName: 'Brendan O’Connor',
     phone: '+61 8 9417 8840',
     bayCount: 12,
+    latitude: -32.0976,
+    longitude: 115.8657,
   },
 ];
 

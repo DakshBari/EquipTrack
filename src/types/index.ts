@@ -32,6 +32,8 @@ export interface Site {
   managerName: string;
   phone: string;
   bayCount: number;
+  latitude: number;
+  longitude: number;
 }
 
 export interface User {

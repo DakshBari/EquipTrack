@@ -4,8 +4,10 @@ import {
   Camera,
   CheckCircle2,
   ClipboardCheck,
+  ExternalLink,
   ImagePlus,
   Lock,
+  MapPin,
   Monitor,
   Play,
   Plus,
@@ -15,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { EquipmentImage } from '../../components/EquipmentImage';
+import { SiteLocationMap } from '../../components/SiteLocationMap';
 import { EquipmentStatusLabel, FaultStatusLabel, SeverityText } from '../../components/StatusBadge';
 import { useEquipTrack } from '../../context/EquipTrackContext';
 import { SAMPLE_FAULT_PHOTO } from '../../data/seedData';
@@ -44,6 +47,7 @@ export function MaintenanceFaultPage() {
   const assignedContact = fault?.assignedContactId
     ? state.maintenanceContacts.find((c) => c.id === fault.assignedContactId)
     : undefined;
+  const faultSite = fault ? state.sites.find((s) => s.id === fault.siteId) : undefined;
 
   const [contractorName, setContractorName] = useState(
     assignedContact?.name || state.maintenanceContacts[0]?.name || 'Michael Brown'
@@ -202,6 +206,44 @@ export function MaintenanceFaultPage() {
             )}
           </div>
         </section>
+
+        {/* Site Yard Location & Directions Map */}
+        {faultSite && (
+          <section className="rounded-2xl bg-white border border-slate-200 p-4 space-y-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-start gap-2">
+                <MapPin className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900">
+                    {faultSite.name} Site Location
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    {faultSite.address}, {faultSite.suburb} {faultSite.state} {faultSite.postcode}
+                  </p>
+                </div>
+              </div>
+
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${faultSite.latitude},${faultSite.longitude}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="min-h-[34px] px-2.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-blue-700 inline-flex items-center gap-1 shrink-0"
+              >
+                <span>Directions</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+
+            <SiteLocationMap
+              sites={state.sites}
+              equipment={state.equipment}
+              faults={state.faults}
+              onlyShowSiteId={faultSite.id}
+              focusedSiteId={faultSite.id}
+              heightClass="h-48"
+            />
+          </section>
+        )}
 
         {/* Contractor Identification */}
         <section className="rounded-2xl bg-white border border-slate-200 p-4 space-y-3">

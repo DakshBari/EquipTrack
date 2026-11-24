@@ -93,18 +93,26 @@ interface EquipTrackContextValue {
 const EquipTrackContext = createContext<EquipTrackContextValue | null>(null);
 
 function loadState(): EquipTrackState {
+  const initial = createInitialSeedData();
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as EquipTrackState;
       if (parsed && Array.isArray(parsed.equipment) && Array.isArray(parsed.users)) {
-        return parsed;
+        const hydratedSites = (parsed.sites || initial.sites).map((site) => {
+          const fallback = initial.sites.find((s) => s.id === site.id);
+          return {
+            ...site,
+            latitude: typeof site.latitude === 'number' ? site.latitude : fallback?.latitude ?? -32.0669,
+            longitude: typeof site.longitude === 'number' ? site.longitude : fallback?.longitude ?? 115.9129,
+          };
+        });
+        return { ...parsed, sites: hydratedSites };
       }
     }
   } catch {
     // Fallback to initial seed
   }
-  const initial = createInitialSeedData();
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
   } catch {

@@ -5,6 +5,7 @@ import {
   ArrowRight,
   CheckCircle2,
   Clock,
+  MapPin,
   Wrench,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -21,13 +22,14 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { SiteLocationMap } from '../../components/SiteLocationMap';
 import { EquipmentStatusLabel, FaultStatusLabel } from '../../components/StatusBadge';
 import { useEquipTrack } from '../../context/EquipTrackContext';
 import { DashboardLayout } from '../../layouts/DashboardLayout';
 import { formatDateTime, getSiteName, isToday } from '../../utils/formatters';
 
 export function SupervisorOverviewPage() {
-  const { state, selectedSite } = useEquipTrack();
+  const { state, selectedSite, setSelectedSite } = useEquipTrack();
 
   const filteredEquipment = useMemo(
     () =>
@@ -366,6 +368,55 @@ export function SupervisorOverviewPage() {
               </ResponsiveContainer>
             </div>
           </div>
+        </section>
+
+        {/* WA Site Locations Map */}
+        <section className="rounded-2xl bg-white border border-slate-200 p-5 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-blue-700" />
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  WA Site Locations & Live Fault Status
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Canning Vale & Jandakot industrial yards · Click a site pin to filter dashboard
+                </p>
+              </div>
+            </div>
+
+            <div className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-xl">
+              {(
+                [
+                  { id: 'all', label: 'Both Sites' },
+                  { id: 'canning-vale', label: 'Canning Vale' },
+                  { id: 'jandakot', label: 'Jandakot' },
+                ] as const
+              ).map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setSelectedSite(tab.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${
+                    selectedSite === tab.id
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <SiteLocationMap
+            sites={state.sites}
+            equipment={state.equipment}
+            faults={state.faults}
+            focusedSiteId={selectedSite}
+            onSelectSite={(siteId) => setSelectedSite(siteId)}
+            heightClass="h-72"
+          />
         </section>
 
         {/* Fleet Status Snapshot */}
