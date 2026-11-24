@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { Edit2, Plus, QrCode, Search, X } from 'lucide-react';
+import { Edit2, Plus, QrCode, Search } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { QrCodeModal } from '../../components/QrCodeModal';
+import { Sheet } from '../../components/Sheet';
+import { VoiceTextInput } from '../../components/VoiceTextInput';
 import { EquipmentStatusLabel } from '../../components/StatusBadge';
 import { useEquipTrack } from '../../context/EquipTrackContext';
 import { EQUIPMENT_IMAGES } from '../../data/seedData';
@@ -26,6 +28,7 @@ export function AdminEquipmentPage() {
   const [formStatus, setFormStatus] = useState<EquipmentStatus>('Operational');
   const [formHourMeter, setFormHourMeter] = useState('0');
   const [formOperatorId, setFormOperatorId] = useState('usr-op-1');
+  const [formNotes, setFormNotes] = useState('');
 
   const operators = state.users.filter((u) => u.role === 'operator');
 
@@ -41,6 +44,7 @@ export function AdminEquipmentPage() {
     setFormStatus('Operational');
     setFormHourMeter('100');
     setFormOperatorId(operators[0]?.id || 'usr-op-1');
+    setFormNotes('');
     setShowAdd(true);
   };
 
@@ -56,6 +60,7 @@ export function AdminEquipmentPage() {
     setFormStatus(eq.status);
     setFormHourMeter(String(eq.hourMeter));
     setFormOperatorId(eq.assignedOperatorId);
+    setFormNotes(eq.notes || '');
     setShowAdd(true);
   };
 
@@ -74,6 +79,7 @@ export function AdminEquipmentPage() {
         hourMeter: Number(formHourMeter) || 0,
         assignedOperatorId: formOperatorId,
         imageUrl: EQUIPMENT_IMAGES[formType],
+        notes: formNotes.trim() || undefined,
       });
     } else {
       addEquipment({
@@ -89,6 +95,7 @@ export function AdminEquipmentPage() {
         status: formStatus,
         assignedOperatorId: formOperatorId,
         imageUrl: EQUIPMENT_IMAGES[formType],
+        notes: formNotes.trim() || undefined,
       });
     }
     setShowAdd(false);
@@ -134,7 +141,46 @@ export function AdminEquipmentPage() {
         </div>
 
         <section className="rounded-2xl bg-white border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto">
+          <ul className="md:hidden divide-y divide-slate-100">
+            {filtered.length === 0 && (
+              <li className="p-6 text-center text-sm text-slate-500">No equipment matches your search.</li>
+            )}
+            {filtered.map((eq) => (
+              <li key={eq.id} className="p-4 space-y-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-slate-900 truncate">
+                      {eq.name} <span className="text-xs font-mono text-slate-500">({eq.id})</span>
+                    </div>
+                    <div className="text-xs text-slate-500 mt-0.5">
+                      {eq.type} · {getSiteName(eq.siteId)} · {eq.manufacturer} {eq.model}
+                    </div>
+                  </div>
+                  <EquipmentStatusLabel status={eq.status} />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setQrTarget(eq)}
+                    className="min-h-[44px] rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center gap-1.5"
+                  >
+                    <QrCode className="w-4 h-4" />
+                    QR Tag
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openEditModal(eq)}
+                    className="min-h-[44px] rounded-xl border border-slate-200 text-xs font-semibold text-blue-700 hover:bg-blue-50 inline-flex items-center justify-center gap-1.5"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    Edit
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
@@ -200,150 +246,147 @@ export function AdminEquipmentPage() {
         </section>
       </div>
 
-      {/* Add / Edit Modal */}
+      {/* Add / Edit */}
       {showAdd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
-          <form
-            onSubmit={handleSave}
-            className="w-full max-w-lg rounded-2xl bg-white border border-slate-200 shadow-xl overflow-hidden"
-          >
-            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-900">
-                {editing ? `Edit ${editing.id}` : 'Add New Equipment'}
-              </h3>
+        <Sheet
+          title={editing ? `Edit ${editing.id}` : 'Add New Equipment'}
+          onClose={() => setShowAdd(false)}
+          onSubmit={handleSave}
+          maxWidthClass="sm:max-w-lg"
+          footer={
+            <>
               <button
                 type="button"
                 onClick={() => setShowAdd(false)}
-                className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Equipment ID
-                </label>
-                <input
-                  required
-                  disabled={Boolean(editing)}
-                  value={formId}
-                  onChange={(e) => setFormId(e.target.value)}
-                  className="w-full min-h-[40px] px-3 rounded-xl border border-slate-200 text-sm font-mono disabled:bg-slate-100"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Equipment Name
-                </label>
-                <input
-                  required
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  placeholder="e.g. Forklift 08"
-                  className="w-full min-h-[40px] px-3 rounded-xl border border-slate-200 text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Type</label>
-                <select
-                  value={formType}
-                  onChange={(e) => setFormType(e.target.value as EquipmentType)}
-                  className="w-full min-h-[40px] px-3 rounded-xl border border-slate-200 text-sm bg-white"
-                >
-                  <option value="Forklift">Forklift</option>
-                  <option value="Baler">Baler</option>
-                  <option value="Loader">Loader</option>
-                  <option value="Truck">Truck</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Site</label>
-                <select
-                  value={formSite}
-                  onChange={(e) => setFormSite(e.target.value as SiteId)}
-                  className="w-full min-h-[40px] px-3 rounded-xl border border-slate-200 text-sm bg-white"
-                >
-                  <option value="canning-vale">Canning Vale</option>
-                  <option value="jandakot">Jandakot</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Manufacturer
-                </label>
-                <input
-                  required
-                  value={formManufacturer}
-                  onChange={(e) => setFormManufacturer(e.target.value)}
-                  className="w-full min-h-[40px] px-3 rounded-xl border border-slate-200 text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Model</label>
-                <input
-                  required
-                  value={formModel}
-                  onChange={(e) => setFormModel(e.target.value)}
-                  className="w-full min-h-[40px] px-3 rounded-xl border border-slate-200 text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Status</label>
-                <select
-                  value={formStatus}
-                  onChange={(e) => setFormStatus(e.target.value as EquipmentStatus)}
-                  className="w-full min-h-[40px] px-3 rounded-xl border border-slate-200 text-sm bg-white"
-                >
-                  <option value="Operational">Operational</option>
-                  <option value="On Hold">On Hold</option>
-                  <option value="Under Maintenance">Under Maintenance</option>
-                  <option value="Awaiting Return-to-Service">Awaiting Return-to-Service</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Assigned Operator
-                </label>
-                <select
-                  value={formOperatorId}
-                  onChange={(e) => setFormOperatorId(e.target.value)}
-                  className="w-full min-h-[40px] px-3 rounded-xl border border-slate-200 text-sm bg-white"
-                >
-                  {operators.map((op) => (
-                    <option key={op.id} value={op.id}>
-                      {op.name} ({getSiteName(op.siteId)})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="px-5 py-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowAdd(false)}
-                className="min-h-[40px] px-4 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700"
+                className="min-h-[44px] px-4 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="min-h-[40px] px-4 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold"
+                className="min-h-[44px] px-4 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold"
               >
                 {editing ? 'Save Changes' : 'Add to Fleet'}
               </button>
-            </div>
-          </form>
+            </>
+          }
+        >
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Equipment ID
+            </label>
+            <input
+              required
+              disabled={Boolean(editing)}
+              value={formId}
+              onChange={(e) => setFormId(e.target.value)}
+              className="w-full min-h-[44px] px-3 rounded-xl border border-slate-200 text-sm font-mono disabled:bg-slate-100"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Equipment Name
+            </label>
+            <input
+              required
+              value={formName}
+              onChange={(e) => setFormName(e.target.value)}
+              placeholder="e.g. Forklift 08"
+              className="w-full min-h-[44px] px-3 rounded-xl border border-slate-200 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Type</label>
+            <select
+              value={formType}
+              onChange={(e) => setFormType(e.target.value as EquipmentType)}
+              className="w-full min-h-[44px] px-3 rounded-xl border border-slate-200 text-sm bg-white"
+            >
+              <option value="Forklift">Forklift</option>
+              <option value="Baler">Baler</option>
+              <option value="Loader">Loader</option>
+              <option value="Truck">Truck</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Site</label>
+            <select
+              value={formSite}
+              onChange={(e) => setFormSite(e.target.value as SiteId)}
+              className="w-full min-h-[44px] px-3 rounded-xl border border-slate-200 text-sm bg-white"
+            >
+              <option value="canning-vale">Canning Vale</option>
+              <option value="jandakot">Jandakot</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Manufacturer
+            </label>
+            <input
+              required
+              value={formManufacturer}
+              onChange={(e) => setFormManufacturer(e.target.value)}
+              className="w-full min-h-[44px] px-3 rounded-xl border border-slate-200 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Model</label>
+            <input
+              required
+              value={formModel}
+              onChange={(e) => setFormModel(e.target.value)}
+              className="w-full min-h-[44px] px-3 rounded-xl border border-slate-200 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Status</label>
+            <select
+              value={formStatus}
+              onChange={(e) => setFormStatus(e.target.value as EquipmentStatus)}
+              className="w-full min-h-[44px] px-3 rounded-xl border border-slate-200 text-sm bg-white"
+            >
+              <option value="Operational">Operational</option>
+              <option value="On Hold">On Hold</option>
+              <option value="Under Maintenance">Under Maintenance</option>
+              <option value="Awaiting Return-to-Service">Awaiting Return-to-Service</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Assigned Operator
+            </label>
+            <select
+              value={formOperatorId}
+              onChange={(e) => setFormOperatorId(e.target.value)}
+              className="w-full min-h-[44px] px-3 rounded-xl border border-slate-200 text-sm bg-white"
+            >
+              {operators.map((op) => (
+                <option key={op.id} value={op.id}>
+                  {op.name} ({getSiteName(op.siteId)})
+                </option>
+              ))}
+            </select>
+          </div>
+          <VoiceTextInput
+            id="equipment-notes"
+            className="sm:col-span-2"
+            label="Description / Internal Notes"
+            value={formNotes}
+            onChange={setFormNotes}
+            rows={3}
+            placeholder="Attachments, known quirks, service arrangements… (speak or type)"
+          />
         </div>
+        </Sheet>
       )}
 
       {qrTarget && <QrCodeModal equipment={qrTarget} onClose={() => setQrTarget(null)} />}

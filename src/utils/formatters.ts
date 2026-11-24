@@ -150,3 +150,13 @@ export function buildFaultShareMessage(params: {
   lines.push('', 'View fault report:', params.faultUrl);
   return lines.join('\n');
 }
+
+/** YYYY-MM-DD for the user's local date, optionally offset by whole days (for date inputs). */
+export function localDateISO(offsetDays = 0): string {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}

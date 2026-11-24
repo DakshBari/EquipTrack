@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { Link } from 'react-router-dom';
 import { ActivityTimeline } from '../../components/ActivityTimeline';
 import { useEquipTrack } from '../../context/EquipTrackContext';
 import { DashboardLayout } from '../../layouts/DashboardLayout';
@@ -104,67 +103,27 @@ export function AdminOverviewPage() {
           </div>
         </section>
 
-        {/* Fleet Chart + Quick Actions */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <section className="lg:col-span-2 rounded-2xl bg-white border border-slate-200 p-5">
-            <h2 className="text-sm font-bold text-slate-900">Fleet Distribution by Site & Type</h2>
-            <p className="text-xs text-slate-500 mb-4">
-              Registered industrial machinery across Canning Vale and Jandakot
-            </p>
-            <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={siteFleetData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
-                  <XAxis dataKey="site" tick={{ fontSize: 12, fill: '#475569' }} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#64748B' }} />
-                  <Tooltip />
-                  <Bar dataKey="Forklifts" fill="#1D4ED8" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="Balers" fill="#0F172A" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="Loaders" fill="#D97706" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="Trucks" fill="#16A34A" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </section>
-
-          <section className="rounded-2xl bg-white border border-slate-200 p-5 space-y-3">
-            <h2 className="text-sm font-bold text-slate-900">Administration Shortcuts</h2>
-            <div className="space-y-2">
-              <Link
-                to="/admin/equipment"
-                className="block rounded-xl border border-slate-200 hover:border-blue-700 p-3 transition-colors"
-              >
-                <div className="text-sm font-semibold text-slate-900">Manage Equipment & QR Tags</div>
-                <div className="text-xs text-slate-500">Add assets and print yard QR stickers</div>
-              </Link>
-              <Link
-                to="/admin/templates"
-                className="block rounded-xl border border-slate-200 hover:border-blue-700 p-3 transition-colors"
-              >
-                <div className="text-sm font-semibold text-slate-900">Checklist Templates</div>
-                <div className="text-xs text-slate-500">
-                  Configure mandatory checks & photo rules
-                </div>
-              </Link>
-              <Link
-                to="/admin/users"
-                className="block rounded-xl border border-slate-200 hover:border-blue-700 p-3 transition-colors"
-              >
-                <div className="text-sm font-semibold text-slate-900">Users & Roles</div>
-                <div className="text-xs text-slate-500">
-                  Manage {state.users.length} operator, supervisor & admin accounts
-                </div>
-              </Link>
-              <Link
-                to="/admin/reports"
-                className="block rounded-xl border border-slate-200 hover:border-blue-700 p-3 transition-colors"
-              >
-                <div className="text-sm font-semibold text-slate-900">Export Compliance CSVs</div>
-                <div className="text-xs text-slate-500">Inspections, faults & downtime reports</div>
-              </Link>
-            </div>
-          </section>
-        </div>
+        {/* Fleet chart (sections are reached from the sidebar, so no duplicate shortcut links) */}
+        <section className="rounded-2xl bg-white border border-slate-200 p-5">
+          <h2 className="text-sm font-bold text-slate-900">Fleet Distribution by Site & Type</h2>
+          <p className="text-xs text-slate-500 mb-4">
+            Registered industrial machinery across Canning Vale and Jandakot
+          </p>
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={siteFleetData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
+                <XAxis dataKey="site" tick={{ fontSize: 12, fill: '#475569' }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#64748B' }} />
+                <Tooltip />
+                <Bar dataKey="Forklifts" fill="#1D4ED8" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Balers" fill="#0F172A" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Loaders" fill="#D97706" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Trucks" fill="#16A34A" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
 
         {/* Recent Organisation Activity */}
         <section className="rounded-2xl bg-white border border-slate-200 p-5 space-y-3">

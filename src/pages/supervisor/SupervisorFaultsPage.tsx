@@ -18,7 +18,7 @@ const ALL_FAULT_STATUSES: FaultStatus[] = [
   'Resolved',
 ];
 
-export function SupervisorFaultsPage({ adminMode = false }: { adminMode?: boolean }) {
+export function SupervisorFaultsPage() {
   const { state, selectedSite } = useEquipTrack();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<FaultStatus | 'all' | 'open'>('open');
@@ -46,10 +46,7 @@ export function SupervisorFaultsPage({ adminMode = false }: { adminMode?: boolea
   });
 
   return (
-    <DashboardLayout
-      mode={adminMode ? 'admin' : 'supervisor'}
-      title={adminMode ? 'Organisation Faults' : 'Fault Management'}
-    >
+    <DashboardLayout mode="supervisor" title="Fault Management">
       <div className="space-y-5">
         {/* Filters */}
         <section className="rounded-2xl bg-white border border-slate-200 p-4 space-y-3">
@@ -124,9 +121,7 @@ export function SupervisorFaultsPage({ adminMode = false }: { adminMode?: boolea
                 const contact = state.maintenanceContacts.find(
                   (c) => c.id === fault.assignedContactId
                 );
-                const detailPath = adminMode
-                  ? `/supervisor/faults/${fault.id}`
-                  : `/supervisor/faults/${fault.id}`;
+                const detailPath = `/supervisor/faults/${fault.id}`;
 
                 return (
                   <Link

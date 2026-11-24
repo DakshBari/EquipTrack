@@ -25,7 +25,7 @@ export function QrCodeModal({ equipment, onClose }: QrCodeModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/50 sm:p-4 backdrop-blur-xs">
       <div className="w-full max-w-sm rounded-2xl bg-white border border-slate-200 shadow-xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 no-print">
           <div>

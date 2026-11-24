@@ -121,7 +121,40 @@ export function AdminUsersPage() {
         </div>
 
         <section className="rounded-2xl bg-white border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto">
+          <ul className="md:hidden divide-y divide-slate-100">
+            {filtered.map((user) => (
+              <li key={user.id} className="p-4 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-slate-900 truncate">{user.name}</div>
+                  <div className="text-xs text-slate-500 truncate">
+                    {user.roleTitle} · {getSiteName(user.siteId)}
+                  </div>
+                  <div className="text-xs font-mono text-slate-500 truncate">{user.email}</div>
+                </div>
+                <div className="flex flex-col items-end gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => updateUser({ ...user, active: !user.active })}
+                    className={`min-h-[36px] px-2.5 rounded-lg text-xs font-semibold ${
+                      user.active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                    }`}
+                  >
+                    {user.active ? 'Active' : 'Inactive'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openEdit(user)}
+                    className="min-h-[40px] px-3 rounded-lg border border-slate-200 text-xs font-semibold text-blue-700 hover:bg-blue-50 inline-flex items-center gap-1"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    Edit
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
@@ -178,10 +211,10 @@ export function AdminUsersPage() {
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/50 sm:p-4 backdrop-blur-xs">
           <form
             onSubmit={handleSave}
-            className="w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-xl overflow-hidden"
+            className="w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-white border border-slate-200 shadow-xl"
           >
             <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
               <h3 className="text-base font-bold text-slate-900">

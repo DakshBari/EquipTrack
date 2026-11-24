@@ -63,6 +63,8 @@ export interface Equipment {
   lastInspectionAt: string;
   lastInspectionResult?: 'Pass' | 'Fail';
   imageUrl: string;
+  /** Admin-maintained description / internal notes (optional; older saved data has none). */
+  notes?: string;
 }
 
 export interface ChecklistItemTemplate {
@@ -103,6 +105,8 @@ export interface PreStartInspection {
   failedCount: number;
   reviewStatus: 'Reviewed' | 'Pending Review' | 'Fault Raised';
   responses: ChecklistResponse[];
+  /** Optional general observations from the operator. */
+  notes?: string;
 }
 
 export interface MaintenanceContact {

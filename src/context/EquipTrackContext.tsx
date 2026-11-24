@@ -26,6 +26,7 @@ interface SubmitInspectionInput {
   equipmentId: string;
   hourMeterReading: number;
   responses: ChecklistResponse[];
+  notes?: string;
 }
 
 interface HoldScheduleInput {
@@ -68,6 +69,7 @@ interface EquipTrackContextValue {
   holdAndScheduleFault: (input: HoldScheduleInput) => void;
   escalateFault: (input: EscalateFaultInput) => void;
   recordShareFault: (input: ShareFaultInput) => void;
+  saveSupervisorComment: (faultId: string, comment: string) => void;
   acknowledgeFault: (faultId: string, actorName: string, note?: string) => void;
   startMaintenanceWork: (faultId: string, actorName: string, note?: string) => void;
   addMaintenanceUpdate: (faultId: string, actorName: string, note: string, photos: string[]) => void;
@@ -254,6 +256,7 @@ export function EquipTrackProvider({ children }: { children: React.ReactNode }) 
       failedCount: failedItems.length,
       reviewStatus: failedItems.length > 0 ? 'Fault Raised' : 'Reviewed',
       responses: input.responses,
+      ...(input.notes ? { notes: input.notes } : {}),
     };
 
     const createdFaults: FaultRecord[] = failedItems.map((item, idx) => {
@@ -489,6 +492,34 @@ export function EquipTrackProvider({ children }: { children: React.ReactNode }) 
           actorRole: actor.roleTitle,
           action: 'Fault Report Shared',
           details: `Dispatched via ${input.channels.join(' & ')} to ${input.contactName}.`,
+          timestamp: now,
+        },
+        ...prev.activities,
+      ],
+    }));
+  };
+
+  const saveSupervisorComment = (faultId: string, comment: string) => {
+    const actor = currentUser || state.users[1];
+    const now = new Date().toISOString();
+    const targetFault = state.faults.find((f) => f.id === faultId);
+    if (!targetFault) return;
+    const trimmed = comment.trim();
+
+    setState((prev) => ({
+      ...prev,
+      faults: prev.faults.map((f) =>
+        f.id === faultId ? { ...f, supervisorComments: trimmed || undefined } : f
+      ),
+      activities: [
+        {
+          id: `act-${Date.now()}-comment`,
+          equipmentId: targetFault.equipmentId,
+          faultId: targetFault.id,
+          actorName: actor.name,
+          actorRole: actor.roleTitle,
+          action: 'Supervisor Review Comment',
+          details: trimmed || 'Review comment cleared.',
           timestamp: now,
         },
         ...prev.activities,
@@ -954,6 +985,7 @@ export function EquipTrackProvider({ children }: { children: React.ReactNode }) 
         holdAndScheduleFault,
         escalateFault,
         recordShareFault,
+        saveSupervisorComment,
         acknowledgeFault,
         startMaintenanceWork,
         addMaintenanceUpdate,

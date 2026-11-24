@@ -43,12 +43,12 @@ export function SupervisorEquipmentPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <Link
               to="/supervisor/equipment"
-              className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-900"
+              className="inline-flex min-h-[40px] items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-900"
             >
               <ArrowLeft className="w-4 h-4" />
               Back to Fleet
             </Link>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => setQrEquipment(eq)}
@@ -128,6 +128,13 @@ export function SupervisorEquipmentPage() {
                   </dd>
                 </div>
               </dl>
+
+              {eq.notes && (
+                <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 text-xs">
+                  <div className="font-semibold text-slate-500">Description / Notes</div>
+                  <p className="text-slate-800 mt-0.5 whitespace-pre-line">{eq.notes}</p>
+                </div>
+              )}
             </div>
           </section>
 
@@ -232,7 +239,45 @@ export function SupervisorEquipmentPage() {
         </section>
 
         <section className="rounded-2xl bg-white border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto">
+          <ul className="md:hidden divide-y divide-slate-100">
+            {filtered.length === 0 && (
+              <li className="p-6 text-center text-sm text-slate-500">No equipment matches these filters.</li>
+            )}
+            {filtered.map((eq) => {
+              const openFaults = state.faults.filter(
+                (f) => f.equipmentId === eq.id && f.status !== 'Resolved'
+              ).length;
+              return (
+                <li key={eq.id}>
+                  <Link
+                    to={`/supervisor/equipment/${eq.id}`}
+                    className="p-4 flex items-center gap-3 hover:bg-slate-50"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold text-slate-900 truncate">
+                        {eq.name} <span className="text-xs font-mono text-slate-500">({eq.id})</span>
+                      </div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        {eq.type} · {getSiteName(eq.siteId)} · Last pre-start{' '}
+                        {formatDateTime(eq.lastInspectionAt)}
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                        <EquipmentStatusLabel status={eq.status} />
+                        {openFaults > 0 && (
+                          <span className="text-xs font-semibold text-red-700">
+                            {openFaults} open fault{openFaults === 1 ? '' : 's'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">

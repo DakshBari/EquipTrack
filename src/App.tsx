@@ -256,22 +256,9 @@ export default function App() {
               </RequireRole>
             }
           />
-          <Route
-            path="/admin/inspections"
-            element={
-              <RequireRole allowed={['admin']}>
-                <SupervisorPreStartsPage adminMode />
-              </RequireRole>
-            }
-          />
-          <Route
-            path="/admin/faults"
-            element={
-              <RequireRole allowed={['admin']}>
-                <SupervisorFaultsPage adminMode />
-              </RequireRole>
-            }
-          />
+          {/* Former admin duplicates of supervisor screens: kept as redirects so old links still work */}
+          <Route path="/admin/inspections" element={<Navigate to="/supervisor/prestarts" replace />} />
+          <Route path="/admin/faults" element={<Navigate to="/supervisor/faults" replace />} />
           <Route
             path="/admin/reports"
             element={

@@ -8,18 +8,44 @@ import {
   ExternalLink,
   Share2,
   ShieldCheck,
-  X,
   XCircle,
 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { ActivityTimeline } from '../../components/ActivityTimeline';
+import { ContactPicker } from '../../components/ContactPicker';
 import { EquipmentImage } from '../../components/EquipmentImage';
 import { ShareFaultModal } from '../../components/ShareFaultModal';
+import { Sheet } from '../../components/Sheet';
 import { EquipmentStatusLabel, FaultStatusLabel, SeverityText } from '../../components/StatusBadge';
+import { VoiceTextInput } from '../../components/VoiceTextInput';
 import { useEquipTrack } from '../../context/EquipTrackContext';
 import { DashboardLayout } from '../../layouts/DashboardLayout';
 import { FaultSeverity } from '../../types';
-import { formatDateTime, getSiteName } from '../../utils/formatters';
+import { formatDateTime, getSiteName, localDateISO } from '../../utils/formatters';
+
+const SEVERITIES: { value: FaultSeverity; className: string }[] = [
+  { value: 'Urgent', className: 'border-red-600 bg-red-600 text-white' },
+  { value: 'High', className: 'border-red-300 bg-red-50 text-red-800' },
+  { value: 'Medium', className: 'border-amber-300 bg-amber-50 text-amber-900' },
+  { value: 'Low', className: 'border-slate-300 bg-slate-100 text-slate-800' },
+];
+
+const HOLD_INSTRUCTION_PHRASES = [
+  'Isolate and tag out before work',
+  'Replace faulty component',
+  'Inspect and report findings',
+  'Functional test before sign-off',
+];
+
+const ESCALATION_PHRASES = [
+  'Safety-critical fault',
+  'Machine required for production',
+  'Attend site today',
+  'Call supervisor on arrival',
+];
+
+const RTS_APPROVE_PHRASES = ['Repair verified on site', 'Functional test passed', 'Photos reviewed'];
+const RTS_REJECT_PHRASES = ['Fault still present', 'Further testing required', 'Photos missing'];
 
 export function SupervisorFaultDetailPage() {
   const { faultId } = useParams<{ faultId: string }>();
@@ -29,6 +55,7 @@ export function SupervisorFaultDetailPage() {
     escalateFault,
     approveReturnToService,
     rejectReturnToService,
+    saveSupervisorComment,
   } = useEquipTrack();
 
   const fault = state.faults.find((f) => f.id === faultId);
@@ -40,7 +67,7 @@ export function SupervisorFaultDetailPage() {
     ? state.maintenanceContacts.find((c) => c.id === fault.assignedContactId)
     : undefined;
 
-  // Modals
+  // Sheets
   const [showHoldModal, setShowHoldModal] = useState(false);
   const [showEscalateModal, setShowEscalateModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
@@ -51,9 +78,7 @@ export function SupervisorFaultDetailPage() {
     fault?.assignedContactId || state.maintenanceContacts[0]?.id || ''
   );
   const [holdSeverity, setHoldSeverity] = useState<FaultSeverity>(fault?.severity || 'High');
-  const [holdDate, setHoldDate] = useState(
-    fault?.plannedDate || new Date().toISOString().slice(0, 10)
-  );
+  const [holdDate, setHoldDate] = useState(fault?.plannedDate || localDateISO());
   const [holdInstructions, setHoldInstructions] = useState(fault?.supervisorInstructions || '');
 
   // Escalate Form State
@@ -66,6 +91,9 @@ export function SupervisorFaultDetailPage() {
 
   // Return-to-Service Form State
   const [rtsNotes, setRtsNotes] = useState('');
+
+  // Review comment
+  const [commentDraft, setCommentDraft] = useState(fault?.supervisorComments || '');
 
   const [bannerMessage, setBannerMessage] = useState<string | null>(null);
 
@@ -114,7 +142,8 @@ export function SupervisorFaultDetailPage() {
     notify(`Fault ${fault.id} escalated to Urgent.`);
   };
 
-  const handleRtsConfirm = () => {
+  const handleRtsConfirm = (e: React.FormEvent) => {
+    e.preventDefault();
     if (rtsModalAction === 'approve') {
       approveReturnToService(fault.id, rtsNotes);
       notify(`${equipment.id} approved for return to service and marked Operational.`);
@@ -137,47 +166,67 @@ export function SupervisorFaultDetailPage() {
     (a) => a.faultId === fault.id || a.equipmentId === equipment.id
   );
 
-  return (
-    <DashboardLayout mode="supervisor" title={`Fault Report · ${fault.id}`}>
-      <div className="space-y-5">
-        {/* Back Breadcrumb */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Link
-            to="/supervisor/faults"
-            className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-900"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to Fault Queue
-          </Link>
+  const commentDirty = commentDraft.trim() !== (fault.supervisorComments || '').trim();
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Link
-              to={`/maintenance/fault/${fault.id}`}
-              className="min-h-[40px] px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1.5"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              Preview Contractor Link
-            </Link>
-            <button
-              type="button"
-              onClick={() => setShowShareModal(true)}
-              className="min-h-[40px] px-4 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold flex items-center gap-1.5"
-            >
-              <Share2 className="w-3.5 h-3.5" />
-              Share Fault Report
-            </button>
-          </div>
-        </div>
+  // The two primary triage decisions. Rendered once: above the evidence on phones,
+  // in the sidebar on desktop.
+  const actionsPanel =
+    fault.status !== 'Resolved' ? (
+      <section className="rounded-2xl bg-white border border-slate-200 p-4 sm:p-5 space-y-2.5">
+        <h3 className="text-sm font-bold text-slate-900">Supervisor Decision</h3>
+
+        <button
+          type="button"
+          onClick={() => setShowHoldModal(true)}
+          className="w-full min-h-[52px] px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold flex items-center justify-center gap-2"
+        >
+          <Calendar className="w-4 h-4" />
+          Hold and Schedule Maintenance
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setShowEscalateModal(true)}
+          className="w-full min-h-[52px] px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-bold flex items-center justify-center gap-2"
+        >
+          <AlertTriangle className="w-4 h-4" />
+          Escalate for Immediate Attention
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setShowShareModal(true)}
+          className="w-full min-h-[44px] px-4 rounded-xl border border-slate-200 text-blue-700 hover:bg-blue-50 text-sm font-semibold flex items-center justify-center gap-2"
+        >
+          <Share2 className="w-4 h-4" />
+          Send to Maintenance (SMS / Email)
+        </button>
+      </section>
+    ) : null;
+
+  return (
+    <DashboardLayout mode="supervisor" title={`Fault ${fault.id}`}>
+      <div className="space-y-4 sm:space-y-5">
+        <Link
+          to="/supervisor/faults"
+          className="inline-flex min-h-[40px] items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-900"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Fault Queue
+        </Link>
 
         {bannerMessage && (
-          <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm font-semibold text-emerald-800">
+          <div
+            role="status"
+            className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm font-semibold text-emerald-800"
+          >
             {bannerMessage}
           </div>
         )}
 
         {/* Equipment ON HOLD Banner */}
         {equipment.status === 'On Hold' && (
-          <div className="rounded-2xl bg-red-600 text-white px-5 py-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="rounded-2xl bg-red-600 text-white px-4 sm:px-5 py-3.5 flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2.5 font-bold text-sm">
               <AlertOctagon className="w-5 h-5 shrink-0" />
               <span>
@@ -192,19 +241,17 @@ export function SupervisorFaultDetailPage() {
 
         {/* Return-to-Service Approval Panel */}
         {canReviewRts && (
-          <section className="rounded-2xl bg-amber-50 border border-amber-300 p-5 space-y-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <ShieldCheck className="w-6 h-6 text-amber-700 shrink-0 mt-0.5" />
-                <div>
-                  <h2 className="text-base font-bold text-amber-950">
-                    Return-to-Service Approval Required
-                  </h2>
-                  <p className="text-xs text-amber-900 mt-0.5">
-                    Maintenance work was completed on {formatDateTime(fault.completedAt || '')}.
-                    Verify repair summary and photos before lifting equipment restrictions.
-                  </p>
-                </div>
+          <section className="rounded-2xl bg-amber-50 border border-amber-300 p-4 sm:p-5 space-y-4">
+            <div className="flex items-start gap-3">
+              <ShieldCheck className="w-6 h-6 text-amber-700 shrink-0 mt-0.5" />
+              <div>
+                <h2 className="text-base font-bold text-amber-950">
+                  Return-to-Service Approval Required
+                </h2>
+                <p className="text-xs text-amber-900 mt-0.5">
+                  Maintenance work was completed on {formatDateTime(fault.completedAt || '')}.
+                  Verify repair summary and photos before lifting equipment restrictions.
+                </p>
               </div>
             </div>
 
@@ -227,11 +274,11 @@ export function SupervisorFaultDetailPage() {
               </div>
             )}
 
-            <div className="flex flex-wrap gap-2.5">
+            <div className="grid grid-cols-1 sm:flex sm:flex-wrap gap-2.5">
               <button
                 type="button"
                 onClick={() => setRtsModalAction('approve')}
-                className="min-h-[44px] px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold flex items-center gap-2"
+                className="min-h-[48px] px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold flex items-center justify-center gap-2"
               >
                 <CheckCircle2 className="w-4 h-4" />
                 Approve Return to Service
@@ -239,7 +286,7 @@ export function SupervisorFaultDetailPage() {
               <button
                 type="button"
                 onClick={() => setRtsModalAction('reject')}
-                className="min-h-[44px] px-5 rounded-xl border border-red-300 bg-white hover:bg-red-50 text-red-700 text-sm font-semibold flex items-center gap-2"
+                className="min-h-[48px] px-5 rounded-xl border border-red-300 bg-white hover:bg-red-50 text-red-700 text-sm font-semibold flex items-center justify-center gap-2"
               >
                 <XCircle className="w-4 h-4" />
                 Reject & Send Back to Maintenance
@@ -248,20 +295,29 @@ export function SupervisorFaultDetailPage() {
           </section>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+        {/* On phones the decision buttons come straight after the status banners */}
+        {actionsPanel && <div className="lg:hidden">{actionsPanel}</div>}
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-5 items-start">
           {/* Left 2 Columns: Fault Evidence & Updates */}
-          <div className="lg:col-span-2 space-y-5">
-            <section className="rounded-2xl bg-white border border-slate-200 p-5 space-y-4">
+          <div className="lg:col-span-2 space-y-4 sm:space-y-5">
+            <section className="rounded-2xl bg-white border border-slate-200 p-4 sm:p-5 space-y-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
                     <span className="font-mono font-bold text-slate-900">{fault.id}</span>
+                    <span>·</span>
+                    <span>
+                      {equipment.name} ({equipment.id})
+                    </span>
                     <span>·</span>
                     <span>{getSiteName(fault.siteId)}</span>
                     <span>·</span>
                     <SeverityText severity={fault.severity} />
                   </div>
-                  <h2 className="text-xl font-bold text-slate-900 mt-1">{fault.failedItem}</h2>
+                  <h2 className="text-lg sm:text-xl font-bold text-slate-900 mt-1">
+                    {fault.failedItem}
+                  </h2>
                 </div>
                 <FaultStatusLabel status={fault.status} />
               </div>
@@ -273,7 +329,15 @@ export function SupervisorFaultDetailPage() {
                   Reported by <span className="font-semibold text-slate-800">{fault.reportedByName}</span> on{' '}
                   {formatDateTime(fault.reportedAt)} · Inspection{' '}
                   <span className="font-mono">{fault.inspectionId}</span>
+                  {inspection && (
+                    <> · Hour meter {inspection.hourMeterReading.toLocaleString()} hrs</>
+                  )}
                 </div>
+                {inspection?.notes && (
+                  <div className="text-xs text-slate-700 pt-2 border-t border-slate-200">
+                    <span className="font-semibold">Operator observations:</span> {inspection.notes}
+                  </div>
+                )}
               </div>
 
               {fault.photos.length > 0 && (
@@ -283,12 +347,13 @@ export function SupervisorFaultDetailPage() {
                   </div>
                   <div className="flex flex-wrap gap-3">
                     {fault.photos.map((photo, idx) => (
-                      <img
-                        key={idx}
-                        src={photo}
-                        alt={`Fault photo ${idx + 1}`}
-                        className="w-40 h-32 rounded-xl object-cover border border-slate-200"
-                      />
+                      <a key={idx} href={photo} target="_blank" rel="noopener noreferrer">
+                        <img
+                          src={photo}
+                          alt={`Fault photo ${idx + 1}`}
+                          className="w-36 h-28 sm:w-40 sm:h-32 rounded-xl object-cover border border-slate-200"
+                        />
+                      </a>
                     ))}
                   </div>
                 </div>
@@ -311,12 +376,45 @@ export function SupervisorFaultDetailPage() {
                   </div>
                 </div>
               )}
+
+              {/* Supervisor review comment */}
+              <div className="pt-3 border-t border-slate-100 space-y-2">
+                <VoiceTextInput
+                  id="supervisor-review-comment"
+                  label="Supervisor Review Comments"
+                  value={commentDraft}
+                  onChange={setCommentDraft}
+                  rows={2}
+                  placeholder="Internal review notes about this fault (speak or type)…"
+                />
+                {commentDirty && (
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCommentDraft(fault.supervisorComments || '')}
+                      className="min-h-[40px] px-3.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700"
+                    >
+                      Discard
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        saveSupervisorComment(fault.id, commentDraft);
+                        notify('Review comment saved.');
+                      }}
+                      className="min-h-[40px] px-4 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold"
+                    >
+                      Save Comment
+                    </button>
+                  </div>
+                )}
+              </div>
             </section>
 
             {/* Maintenance Updates */}
-            <section className="rounded-2xl bg-white border border-slate-200 p-5 space-y-3">
+            <section className="rounded-2xl bg-white border border-slate-200 p-4 sm:p-5 space-y-3">
               <h3 className="text-sm font-bold text-slate-900">
-                Maintenance Progress & Contractor Updates ({fault.maintenanceUpdates.length})
+                Maintenance Updates ({fault.maintenanceUpdates.length})
               </h3>
               {fault.maintenanceUpdates.length === 0 ? (
                 <p className="text-xs text-slate-500">
@@ -357,47 +455,15 @@ export function SupervisorFaultDetailPage() {
             </section>
 
             {/* Activity Timeline */}
-            <section className="rounded-2xl bg-white border border-slate-200 p-5 space-y-3">
+            <section className="rounded-2xl bg-white border border-slate-200 p-4 sm:p-5 space-y-3">
               <h3 className="text-sm font-bold text-slate-900">Audit & Activity Timeline</h3>
               <ActivityTimeline events={timelineEvents} />
             </section>
           </div>
 
           {/* Right Column: Actions, Equipment & Assignment */}
-          <div className="space-y-5">
-            {/* Two Primary Supervisor Fault Actions */}
-            {fault.status !== 'Resolved' && (
-              <section className="rounded-2xl bg-white border border-slate-200 p-5 space-y-3">
-                <h3 className="text-sm font-bold text-slate-900">Supervisor Actions</h3>
-
-                <button
-                  type="button"
-                  onClick={() => setShowHoldModal(true)}
-                  className="w-full min-h-[46px] px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold flex items-center justify-center gap-2"
-                >
-                  <Calendar className="w-4 h-4" />
-                  Hold and Schedule Maintenance
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setShowEscalateModal(true)}
-                  className="w-full min-h-[46px] px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold flex items-center justify-center gap-2"
-                >
-                  <AlertTriangle className="w-4 h-4" />
-                  Escalate for Immediate Attention
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setShowShareModal(true)}
-                  className="w-full min-h-[44px] px-4 rounded-xl border border-blue-700 text-blue-700 hover:bg-blue-50 text-sm font-semibold flex items-center justify-center gap-2"
-                >
-                  <Share2 className="w-4 h-4" />
-                  Share via SMS / Email
-                </button>
-              </section>
-            )}
+          <div className="space-y-4 sm:space-y-5">
+            {actionsPanel && <div className="hidden lg:block">{actionsPanel}</div>}
 
             {/* Machine Card */}
             <section className="rounded-2xl bg-white border border-slate-200 overflow-hidden">
@@ -405,7 +471,7 @@ export function SupervisorFaultDetailPage() {
                 src={equipment.imageUrl}
                 alt={equipment.name}
                 type={equipment.type}
-                className="w-full h-40"
+                className="w-full h-36"
               />
               <div className="p-4 space-y-3">
                 <div className="flex items-start justify-between gap-2">
@@ -423,12 +489,11 @@ export function SupervisorFaultDetailPage() {
                     Model: {equipment.manufacturer} {equipment.model}
                   </div>
                   <div>Hour Meter: {equipment.hourMeter.toLocaleString()} hrs</div>
-                  {inspection && <div>Original Inspection: {inspection.id}</div>}
                 </div>
 
                 <Link
                   to={`/supervisor/equipment/${equipment.id}`}
-                  className="block text-center min-h-[40px] leading-[40px] rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-blue-700"
+                  className="flex items-center justify-center min-h-[42px] rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-blue-700"
                 >
                   View Equipment Profile
                 </Link>
@@ -443,7 +508,7 @@ export function SupervisorFaultDetailPage() {
                   <div className="font-bold text-slate-900">{assignedContact.name}</div>
                   <div className="text-xs text-slate-600">{assignedContact.company}</div>
                   <div className="text-xs font-mono text-slate-600">{assignedContact.phone}</div>
-                  <div className="text-xs text-slate-600">{assignedContact.email}</div>
+                  <div className="text-xs text-slate-600 break-all">{assignedContact.email}</div>
                   {fault.plannedDate && (
                     <div className="text-xs font-semibold text-blue-700 pt-1">
                       Planned Date: {fault.plannedDate}
@@ -452,7 +517,7 @@ export function SupervisorFaultDetailPage() {
                 </div>
               ) : (
                 <p className="text-xs text-slate-500">
-                  No maintenance contact assigned yet. Use Hold & Schedule or Share to assign.
+                  No maintenance contact assigned yet. Hold & Schedule or Escalate to assign one.
                 </p>
               )}
 
@@ -462,6 +527,14 @@ export function SupervisorFaultDetailPage() {
                   {fault.shareHistory[0].contactName} ({formatDateTime(fault.shareHistory[0].sentAt)})
                 </div>
               )}
+
+              <Link
+                to={`/maintenance/fault/${fault.id}`}
+                className="flex items-center justify-center gap-1.5 min-h-[40px] rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                Preview Maintenance Link
+              </Link>
             </section>
 
             {/* Previous Fault History on Machine */}
@@ -477,9 +550,9 @@ export function SupervisorFaultDetailPage() {
                       to={`/supervisor/faults/${pf.id}`}
                       className="block rounded-xl border border-slate-100 hover:border-blue-700 p-2.5 text-xs"
                     >
-                      <div className="flex justify-between font-semibold text-slate-900">
+                      <div className="flex justify-between gap-2 font-semibold text-slate-900">
                         <span>{pf.id}</span>
-                        <span>{pf.status}</span>
+                        <span className="text-right">{pf.status}</span>
                       </div>
                       <div className="text-slate-600 mt-0.5">{pf.failedItem}</div>
                     </Link>
@@ -491,228 +564,190 @@ export function SupervisorFaultDetailPage() {
         </div>
       </div>
 
-      {/* Hold & Schedule Maintenance Modal */}
+      {/* Hold & Schedule Maintenance */}
       {showHoldModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
-          <form
-            onSubmit={handleHoldSubmit}
-            className="w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-xl overflow-hidden"
-          >
-            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-900">Hold & Schedule Maintenance</h3>
+        <Sheet
+          title="Hold & Schedule Maintenance"
+          subtitle={`${fault.id} · ${equipment.name} (${equipment.id})`}
+          onClose={() => setShowHoldModal(false)}
+          onSubmit={handleHoldSubmit}
+          footer={
+            <>
               <button
                 type="button"
                 onClick={() => setShowHoldModal(false)}
-                className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-5 space-y-4">
-              <div className="rounded-xl bg-red-50 border border-red-200 p-3 text-xs text-red-800">
-                Confirming will place <strong>{equipment.name} ({equipment.id})</strong> on{' '}
-                <strong>ON HOLD — DO NOT OPERATE</strong> and update fault {fault.id} to Scheduled.
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Maintenance Contact
-                </label>
-                <select
-                  value={holdContactId}
-                  onChange={(e) => setHoldContactId(e.target.value)}
-                  className="w-full min-h-[42px] px-3 rounded-xl border border-slate-200 text-sm bg-white"
-                >
-                  {state.maintenanceContacts.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} — {c.company}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Priority
-                  </label>
-                  <select
-                    value={holdSeverity}
-                    onChange={(e) => setHoldSeverity(e.target.value as FaultSeverity)}
-                    className="w-full min-h-[42px] px-3 rounded-xl border border-slate-200 text-sm bg-white"
-                  >
-                    <option value="Urgent">Urgent</option>
-                    <option value="High">High</option>
-                    <option value="Medium">Medium</option>
-                    <option value="Low">Low</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Planned Date
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={holdDate}
-                    onChange={(e) => setHoldDate(e.target.value)}
-                    className="w-full min-h-[42px] px-3 rounded-xl border border-slate-200 text-sm"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Supervisor Instructions
-                </label>
-                <textarea
-                  rows={3}
-                  required
-                  value={holdInstructions}
-                  onChange={(e) => setHoldInstructions(e.target.value)}
-                  placeholder="Provide lock-out location, parts instructions, or safety notes..."
-                  className="w-full rounded-xl border border-slate-200 p-3 text-sm"
-                />
-              </div>
-            </div>
-            <div className="px-5 py-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowHoldModal(false)}
-                className="min-h-[42px] px-4 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700"
+                className="min-h-[46px] px-4 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="min-h-[42px] px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold"
+                disabled={!holdContactId || !holdInstructions.trim()}
+                className="min-h-[46px] px-4 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white text-sm font-bold"
               >
                 Place On Hold & Schedule
               </button>
+            </>
+          }
+        >
+          <div className="rounded-xl bg-red-50 border border-red-200 p-3 text-xs text-red-800">
+            Confirming will place <strong>{equipment.name}</strong> <strong>ON HOLD — DO NOT OPERATE</strong>{' '}
+            and set fault {fault.id} to Scheduled.
+          </div>
+
+          <ContactPicker
+            contacts={state.maintenanceContacts}
+            value={holdContactId}
+            onChange={setHoldContactId}
+          />
+
+          <div>
+            <div className="text-xs font-semibold text-slate-700 mb-1">Priority</div>
+            <div role="radiogroup" aria-label="Priority" className="grid grid-cols-4 gap-1.5">
+              {SEVERITIES.map((s) => (
+                <button
+                  key={s.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={holdSeverity === s.value}
+                  onClick={() => setHoldSeverity(s.value)}
+                  className={`min-h-[44px] rounded-xl border text-xs font-bold transition-colors ${
+                    holdSeverity === s.value
+                      ? `${s.className} ring-2 ring-offset-1 ring-slate-900`
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {s.value}
+                </button>
+              ))}
             </div>
-          </form>
-        </div>
+          </div>
+
+          <div>
+            <label htmlFor="hold-date" className="block text-xs font-semibold text-slate-700 mb-1">
+              Planned Date
+            </label>
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {[
+                { label: 'Today', offset: 0 },
+                { label: 'Tomorrow', offset: 1 },
+                { label: 'In 3 days', offset: 3 },
+                { label: 'Next week', offset: 7 },
+              ].map((opt) => {
+                const iso = localDateISO(opt.offset);
+                return (
+                  <button
+                    key={opt.label}
+                    type="button"
+                    onClick={() => setHoldDate(iso)}
+                    className={`min-h-[38px] px-3 rounded-lg border text-xs font-semibold ${
+                      holdDate === iso
+                        ? 'border-blue-700 bg-blue-50 text-blue-700'
+                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+            <input
+              id="hold-date"
+              type="date"
+              required
+              value={holdDate}
+              min={localDateISO()}
+              onChange={(e) => setHoldDate(e.target.value)}
+              className="w-full min-h-[44px] px-3 rounded-xl border border-slate-200 text-sm"
+            />
+          </div>
+
+          <VoiceTextInput
+            id="hold-instructions"
+            label="Maintenance Instructions"
+            value={holdInstructions}
+            onChange={setHoldInstructions}
+            required
+            rows={3}
+            placeholder="Lock-out location, parts, or safety notes. Tap the mic to dictate."
+            suggestions={HOLD_INSTRUCTION_PHRASES}
+          />
+        </Sheet>
       )}
 
-      {/* Escalate Fault Modal */}
+      {/* Escalate Fault */}
       {showEscalateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
-          <form
-            onSubmit={handleEscalateSubmit}
-            className="w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-xl overflow-hidden"
-          >
-            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-900">Escalate Fault as Urgent</h3>
+        <Sheet
+          title="Escalate for Immediate Attention"
+          subtitle={`${fault.id} · ${equipment.name} (${equipment.id})`}
+          onClose={() => setShowEscalateModal(false)}
+          onSubmit={handleEscalateSubmit}
+          footer={
+            <>
               <button
                 type="button"
                 onClick={() => setShowEscalateModal(false)}
-                className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-5 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Assign Maintenance Contact
-                </label>
-                <select
-                  value={escContactId}
-                  onChange={(e) => setEscContactId(e.target.value)}
-                  className="w-full min-h-[42px] px-3 rounded-xl border border-slate-200 text-sm bg-white"
-                >
-                  {state.maintenanceContacts.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} — {c.phone}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Urgent Escalation Instructions
-                </label>
-                <textarea
-                  rows={3}
-                  required
-                  value={escInstructions}
-                  onChange={(e) => setEscInstructions(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 p-3 text-sm"
-                />
-              </div>
-            </div>
-            <div className="px-5 py-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowEscalateModal(false)}
-                className="min-h-[42px] px-4 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700"
+                className="min-h-[46px] px-4 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="min-h-[42px] px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-semibold"
+                disabled={!escInstructions.trim()}
+                className="min-h-[46px] px-4 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white text-sm font-bold"
               >
                 Confirm Urgent Escalation
               </button>
-            </div>
-          </form>
-        </div>
+            </>
+          }
+        >
+          <div className="rounded-xl bg-red-50 border border-red-200 p-3 text-xs text-red-800">
+            Fault {fault.id} will be marked <strong>Urgent</strong> and assigned to the selected
+            contact.
+          </div>
+
+          <ContactPicker
+            contacts={state.maintenanceContacts}
+            value={escContactId}
+            onChange={setEscContactId}
+            label="Assign Maintenance Contact"
+          />
+
+          <VoiceTextInput
+            id="escalation-reason"
+            label="Escalation Reason & Instructions"
+            value={escInstructions}
+            onChange={setEscInstructions}
+            required
+            rows={3}
+            tone="danger"
+            suggestions={ESCALATION_PHRASES}
+          />
+        </Sheet>
       )}
 
-      {/* Return-to-Service Confirmation Modal */}
+      {/* Return-to-Service Confirmation */}
       {rtsModalAction && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-900">
-                {rtsModalAction === 'approve'
-                  ? 'Confirm Return-to-Service Approval'
-                  : 'Reject Return-to-Service'}
-              </h3>
+        <Sheet
+          title={
+            rtsModalAction === 'approve'
+              ? 'Confirm Return-to-Service Approval'
+              : 'Reject Return-to-Service'
+          }
+          onClose={() => setRtsModalAction(null)}
+          onSubmit={handleRtsConfirm}
+          footer={
+            <>
               <button
                 type="button"
                 onClick={() => setRtsModalAction(null)}
-                className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-5 space-y-4">
-              <p className="text-sm text-slate-700">
-                {rtsModalAction === 'approve'
-                  ? `Approving will mark fault ${fault.id} as Resolved and return ${equipment.name} (${equipment.id}) to Operational status.`
-                  : `Rejecting will keep ${equipment.name} (${equipment.id}) restricted On Hold and send fault ${fault.id} back to maintenance.`}
-              </p>
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Supervisor Verification Notes
-                </label>
-                <textarea
-                  rows={3}
-                  value={rtsNotes}
-                  onChange={(e) => setRtsNotes(e.target.value)}
-                  placeholder={
-                    rtsModalAction === 'approve'
-                      ? 'Verified repair test and physical safety check...'
-                      : 'Specify what further repair or verification is required...'
-                  }
-                  className="w-full rounded-xl border border-slate-200 p-3 text-sm"
-                />
-              </div>
-            </div>
-            <div className="px-5 py-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setRtsModalAction(null)}
-                className="min-h-[42px] px-4 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700"
+                className="min-h-[46px] px-4 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700"
               >
                 Cancel
               </button>
               <button
-                type="button"
-                onClick={handleRtsConfirm}
-                className={`min-h-[42px] px-4 rounded-xl text-white text-xs font-semibold ${
+                type="submit"
+                className={`min-h-[46px] px-4 rounded-xl text-white text-sm font-bold ${
                   rtsModalAction === 'approve'
                     ? 'bg-emerald-600 hover:bg-emerald-700'
                     : 'bg-red-600 hover:bg-red-700'
@@ -720,9 +755,29 @@ export function SupervisorFaultDetailPage() {
               >
                 {rtsModalAction === 'approve' ? 'Approve & Return Operational' : 'Reject & Return'}
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        >
+          <p className="text-sm text-slate-700">
+            {rtsModalAction === 'approve'
+              ? `Approving will mark fault ${fault.id} as Resolved and return ${equipment.name} (${equipment.id}) to Operational status.`
+              : `Rejecting will keep ${equipment.name} (${equipment.id}) restricted On Hold and send fault ${fault.id} back to maintenance.`}
+          </p>
+          <VoiceTextInput
+            id="rts-notes"
+            label="Supervisor Verification Notes"
+            value={rtsNotes}
+            onChange={setRtsNotes}
+            rows={3}
+            tone={rtsModalAction === 'approve' ? 'success' : 'danger'}
+            placeholder={
+              rtsModalAction === 'approve'
+                ? 'Verified repair test and physical safety check...'
+                : 'Specify what further repair or verification is required...'
+            }
+            suggestions={rtsModalAction === 'approve' ? RTS_APPROVE_PHRASES : RTS_REJECT_PHRASES}
+          />
+        </Sheet>
       )}
 
       {showShareModal && (

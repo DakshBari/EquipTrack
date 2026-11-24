@@ -152,6 +152,8 @@ export function SupervisorOverviewPage() {
     return groups;
   }, [filteredFaults]);
 
+  const restrictedEquipment = filteredEquipment.filter((e) => e.status !== 'Operational');
+
   const urgentAndReviewFaults = filteredFaults.filter((f) =>
     ['Urgent', 'Awaiting Review', 'Awaiting Return-to-Service Approval', 'Maintenance Completed'].includes(
       f.status
@@ -380,32 +382,9 @@ export function SupervisorOverviewPage() {
                   WA Site Locations & Live Fault Status
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Canning Vale & Jandakot industrial yards · Click a site pin to filter dashboard
+                  Canning Vale & Jandakot industrial yards · Tap a site pin, or use the site selector above, to filter
                 </p>
               </div>
-            </div>
-
-            <div className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-xl">
-              {(
-                [
-                  { id: 'all', label: 'Both Sites' },
-                  { id: 'canning-vale', label: 'Canning Vale' },
-                  { id: 'jandakot', label: 'Jandakot' },
-                ] as const
-              ).map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setSelectedSite(tab.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${
-                    selectedSite === tab.id
-                      ? 'bg-white text-slate-900 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
             </div>
           </div>
 
@@ -419,23 +398,16 @@ export function SupervisorOverviewPage() {
           />
         </section>
 
-        {/* Fleet Status Snapshot */}
+        {/* Restricted equipment only. The full fleet lives on the Equipment page. */}
+        {restrictedEquipment.length > 0 && (
         <section className="rounded-2xl bg-white border border-slate-200 p-5">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold text-slate-900">Equipment Status Snapshot</h3>
-            <Link
-              to="/supervisor/equipment"
-              className="text-xs font-semibold text-blue-700 hover:underline"
-            >
-              Manage Fleet
-            </Link>
+            <h3 className="text-sm font-bold text-slate-900">
+              Equipment Out of Service ({restrictedEquipment.length})
+            </h3>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {filteredEquipment
-              .filter((e) => e.status !== 'Operational')
-              .concat(filteredEquipment.filter((e) => e.status === 'Operational'))
-              .slice(0, 8)
-              .map((eq) => (
+            {restrictedEquipment.map((eq) => (
                 <Link
                   key={eq.id}
                   to={`/supervisor/equipment/${eq.id}`}
@@ -453,6 +425,7 @@ export function SupervisorOverviewPage() {
               ))}
           </div>
         </section>
+        )}
       </div>
     </DashboardLayout>
   );

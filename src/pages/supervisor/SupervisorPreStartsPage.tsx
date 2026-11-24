@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { AlertTriangle, CheckCircle2, Eye, Search, X } from 'lucide-react';
+import { AlertTriangle, BarChart3, CheckCircle2, Eye, Search, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useEquipTrack } from '../../context/EquipTrackContext';
 import { DashboardLayout } from '../../layouts/DashboardLayout';
 import { EquipmentType, PreStartInspection } from '../../types';
 import { formatDateTime, getSiteName } from '../../utils/formatters';
 
-export function SupervisorPreStartsPage({ adminMode = false }: { adminMode?: boolean }) {
+export function SupervisorPreStartsPage() {
   const { state, selectedSite } = useEquipTrack();
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<EquipmentType | 'all'>('all');
@@ -35,10 +36,7 @@ export function SupervisorPreStartsPage({ adminMode = false }: { adminMode?: boo
   });
 
   return (
-    <DashboardLayout
-      mode={adminMode ? 'admin' : 'supervisor'}
-      title={adminMode ? 'All Pre-Start Inspections' : 'Pre-Start Submissions'}
-    >
+    <DashboardLayout mode="supervisor" title="Pre-Start Inspections">
       <div className="space-y-5">
         {/* Filters */}
         <section className="rounded-2xl bg-white border border-slate-200 p-4">
@@ -103,15 +101,62 @@ export function SupervisorPreStartsPage({ adminMode = false }: { adminMode?: boo
           </div>
         </section>
 
-        {/* Submissions Table */}
+        {/* Submissions: cards on mobile, table on desktop */}
         <section className="rounded-2xl bg-white border border-slate-200 overflow-hidden">
-          <div className="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between">
+          <div className="px-4 sm:px-5 py-3 border-b border-slate-200 flex items-center justify-between gap-3">
             <h2 className="text-sm font-bold text-slate-900">
               Inspection Records ({filtered.length})
             </h2>
+            <Link
+              to="/supervisor/reports"
+              className="min-h-[40px] px-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-blue-700 inline-flex items-center gap-1.5 whitespace-nowrap"
+            >
+              <BarChart3 className="w-4 h-4" />
+              Reports & Export
+            </Link>
           </div>
 
-          <div className="overflow-x-auto">
+          <ul className="md:hidden divide-y divide-slate-100">
+            {filtered.length === 0 && (
+              <li className="p-6 text-center text-sm text-slate-500">No inspections match these filters.</li>
+            )}
+            {filtered.map((insp) => (
+              <li key={insp.id}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedInspection(insp)}
+                  className="w-full text-left p-4 flex items-start justify-between gap-3 hover:bg-slate-50"
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-slate-900 truncate">
+                      {insp.equipmentName}{' '}
+                      <span className="font-mono text-xs text-slate-500">({insp.equipmentId})</span>
+                    </div>
+                    <div className="text-xs text-slate-500 mt-0.5">
+                      {insp.operatorName} · {getSiteName(insp.siteId)}
+                    </div>
+                    <div className="text-xs font-mono tabular-nums text-slate-500 mt-0.5">
+                      {formatDateTime(insp.submittedAt)} · {insp.id}
+                    </div>
+                  </div>
+                  <span
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold shrink-0 ${
+                      insp.result === 'Pass' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
+                    }`}
+                  >
+                    {insp.result === 'Pass' ? (
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                    ) : (
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                    )}
+                    {insp.result === 'Pass' ? 'Pass' : `${insp.failedCount} failed`}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
@@ -196,8 +241,8 @@ export function SupervisorPreStartsPage({ adminMode = false }: { adminMode?: boo
 
       {/* Inspection Detail Modal */}
       {selectedInspection && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-2xl rounded-2xl bg-white border border-slate-200 shadow-xl overflow-hidden max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/50 sm:p-4 backdrop-blur-xs">
+          <div className="w-full max-w-2xl rounded-t-2xl sm:rounded-2xl bg-white border border-slate-200 shadow-xl overflow-hidden max-h-[92vh] flex flex-col">
             <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
               <div>
                 <div className="text-xs font-mono text-slate-500">{selectedInspection.id}</div>
@@ -242,6 +287,13 @@ export function SupervisorPreStartsPage({ adminMode = false }: { adminMode?: boo
                 </div>
               </div>
 
+              {selectedInspection.notes && (
+                <div className="rounded-xl bg-blue-50 border border-blue-200 p-3.5 text-xs">
+                  <div className="font-semibold text-blue-900">Operator observations</div>
+                  <p className="text-blue-900 mt-0.5 whitespace-pre-line">{selectedInspection.notes}</p>
+                </div>
+              )}
+
               <div className="space-y-2.5">
                 {selectedInspection.responses.map((resp, idx) => (
                   <div
@@ -265,6 +317,21 @@ export function SupervisorPreStartsPage({ adminMode = false }: { adminMode?: boo
                       </span>
                     </div>
                     {resp.notes && <p className="text-xs text-red-800">{resp.notes}</p>}
+                    {resp.status === 'Fail' &&
+                      (() => {
+                        const linkedFault = state.faults.find(
+                          (f) =>
+                            f.inspectionId === selectedInspection.id && f.failedItem === resp.label
+                        );
+                        return linkedFault ? (
+                          <Link
+                            to={`/supervisor/faults/${linkedFault.id}`}
+                            className="inline-flex min-h-[36px] items-center gap-1.5 px-3 rounded-lg border border-red-200 bg-white text-xs font-semibold text-red-700 hover:bg-red-50"
+                          >
+                            Open fault {linkedFault.id} · {linkedFault.status}
+                          </Link>
+                        ) : null;
+                      })()}
                     {resp.photos && resp.photos.length > 0 && (
                       <div className="flex flex-wrap gap-2">
                         {resp.photos.map((p, pIdx) => (

@@ -1,0 +1,63 @@
+# Render Blueprint for EquipTrack
+# Docs: https://render.com/docs/blueprint-spec
+#
+# EquipTrack is a client-side React app (all data is kept in the browser's
+# LocalStorage), so it is deployed as a Render Static Site on the free plan.
+# Static sites are served from Render's CDN and never spin down.
+
+services:
+  # ---------------------------------------------------------------------------
+  # Static site (free)
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: equiptrack
+    runtime: static
+    branch: main
+    autoDeploy: true
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    pullRequestPreviewsEnabled: false
+    envVars:
+      # Vite 8 needs Node 20.19+ / 22.12+
+      - key: NODE_VERSION
+        value: "22.14.0"
+    routes:
+      # Single-page app: send every route (e.g. /equipment/FL-001 from a QR code,
+      # /maintenance/fault/FR-1019 from a shared link) to index.html so React
+      # Router can handle it instead of Render returning 404.
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      # Hashed build assets can be cached forever
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      # Always fetch the latest index.html so new deploys show up immediately
+      - path: /index.html
+        name: Cache-Control
+        value: no-cache
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      # Camera (QR scanning) and microphone (voice input) are used by the app itself
+      - path: /*
+        name: Permissions-Policy
+        value: camera=(self), microphone=(self), geolocation=()
+
+  # ---------------------------------------------------------------------------
+  # Keep-alive cron job (OPTIONAL, NOT FREE)
+  # ---------------------------------------------------------------------------
+  # Render cron jobs are not part of the free plan; they're billed by runtime
+  # with a small monthly minimum. A static site does not sleep, so this is not
+  # needed for the site above. It is only useful if you later move EquipTrack
+  # (or a backend) to a free *Web Service*, which sleeps after 15 min idle.
+  # Uncomment to enable, and replace the URL with your deployed URL.
+  #
+  # - type: cron
+  #   name: equiptrack-keepalive
+  #   runtime: node
+  #   plan: starter
+  #   schedule: "*/14 * * * *"   # every 14 minutes (UTC)
+  #   buildCommand: echo "no build needed"
+  #   startCommand: curl -fsS --max-time 30 https://equiptrack.onrender.com/ > /dev/null && echo "ping ok"

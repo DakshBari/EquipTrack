@@ -162,10 +162,10 @@ export function AdminSitesPage() {
       </div>
 
       {editing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/50 sm:p-4 backdrop-blur-xs">
           <form
             onSubmit={handleSave}
-            className="w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-xl overflow-hidden"
+            className="w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-white border border-slate-200 shadow-xl"
           >
             <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
               <h3 className="text-base font-bold text-slate-900">Edit {editing.name}</h3>

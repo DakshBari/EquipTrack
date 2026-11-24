@@ -12,6 +12,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useEquipTrack } from '../context/EquipTrackContext';
 import { FaultRecord } from '../types';
+import { ContactPicker } from './ContactPicker';
 import { buildFaultShareMessage, getSiteName } from '../utils/formatters';
 
 interface ShareFaultModalProps {
@@ -134,8 +135,8 @@ export function ShareFaultModal({ fault, onClose }: ShareFaultModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
-      <div className="w-full max-w-xl rounded-2xl bg-white border border-slate-200 shadow-xl overflow-hidden max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/50 sm:p-4 backdrop-blur-xs">
+      <div className="w-full max-w-xl rounded-t-2xl sm:rounded-2xl bg-white border border-slate-200 shadow-xl overflow-hidden max-h-[92vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
           <div>
             <h3 className="text-base font-semibold text-slate-900">Share Fault Report</h3>
@@ -154,42 +155,12 @@ export function ShareFaultModal({ fault, onClose }: ShareFaultModalProps) {
         </div>
 
         <div className="p-5 space-y-4 overflow-y-auto">
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-              Select Maintenance Contact
-            </label>
-            <div className="grid grid-cols-1 gap-2">
-              {state.maintenanceContacts.map((contact) => {
-                const active = contact.id === contactId;
-                return (
-                  <button
-                    key={contact.id}
-                    type="button"
-                    onClick={() => setContactId(contact.id)}
-                    className={`w-full text-left px-3.5 py-2.5 rounded-xl border transition-colors flex items-center justify-between gap-3 ${
-                      active
-                        ? 'border-blue-700 bg-blue-50/70'
-                        : 'border-slate-200 bg-white hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold text-slate-900">{contact.name}</div>
-                      <div className="text-xs text-slate-500 truncate">
-                        {contact.company} · {contact.phone} · {contact.email}
-                      </div>
-                    </div>
-                    <span
-                      className={`text-xs font-medium shrink-0 ${
-                        active ? 'text-blue-700' : 'text-slate-400'
-                      }`}
-                    >
-                      {active ? 'Selected' : 'Select'}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <ContactPicker
+            contacts={state.maintenanceContacts}
+            value={contactId}
+            onChange={setContactId}
+            label="Select Maintenance Contact"
+          />
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1.5">
@@ -250,7 +221,7 @@ export function ShareFaultModal({ fault, onClose }: ShareFaultModalProps) {
         </div>
 
         <div className="px-5 py-4 border-t border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={handleCopy}
@@ -272,7 +243,7 @@ export function ShareFaultModal({ fault, onClose }: ShareFaultModalProps) {
             </button>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {sendSms && (
               <button
                 type="button"
